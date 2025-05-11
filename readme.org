@@ -1,0 +1,8 @@
+#+title: Readme
+
+
+Add to your mcp.el servers with
+
+#+begin_src emacs-lisp :tangle yes
+        ("introspection" . (:command "npx" :args ("-y" "@lnajt/emacs-introspection-mcp")) )
+#+end_src

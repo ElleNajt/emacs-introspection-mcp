@@ -1,5 +1,5 @@
 {
-  "name": "emacs-introspection-mcp",
+  "name": "@lnajt/emacs-introspection-mcp",
   "version": "1.0.0",
   "main": "index.js",
   "bin": "./dist/emacs-introspection-mcp.js",
