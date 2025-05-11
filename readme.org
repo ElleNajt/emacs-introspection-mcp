@@ -10,7 +10,7 @@ This server currently provides three tools for interacting with Emacs:
 
 * Installation
 
-First, set up gptel and mcp.el https://github.com/lizqwerscott/mcp.el .
+First, set up [[https://github.com/karthink/gptel][gptel]] and [[https://github.com/lizqwerscott/mcp.el][mcp.el]] .
 
 Then, add this to your the mcp-hub-servers variable:
 
