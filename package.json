@@ -1,0 +1,26 @@
+{
+  "name": "emacs-introspection-mcp",
+  "version": "1.0.0",
+  "main": "index.js",
+  "bin": "./dist/emacs-introspection-mcp.js",
+  "scripts": {
+    "start": "npm run build && node dist/emacs-introspection-mcp.js",
+    "lint": "eslint",
+    "clean": "rm -rf dist",
+    "build": "tsc --project tsconfig.build.json",
+    "prepublishOnly": "npm run clean && npm run build",
+    "dev": "fastmcp dev src/emacs-introspection-mcp.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "fastmcp": "^1.27.4",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.17",
+    "typescript": "^5.8.3"
+  }
+}
