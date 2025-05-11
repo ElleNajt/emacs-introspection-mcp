@@ -1,8 +1,37 @@
 #+title: Readme
 
+A simple MCP server for emacs introspection through the emacsclient daemon.
 
-Add to your mcp.el servers with
+This server currently provides three tools for interacting with Emacs:
+
+1. `describe_function` - Retrieves documentation for Emacs functions
+2. `describe_variable` - Retrieves documentation for Emacs variables
+3. `get_variable_value` - Gets the current value of an Emacs variable
+
+* Installation
+
+First, set up gptel and mcp.el https://github.com/lizqwerscott/mcp.el .
+
+Then, add this to your the mcp-hub-servers variable:
 
 #+begin_src emacs-lisp :tangle yes
-        ("introspection" . (:command "npx" :args ("-y" "@lnajt/emacs-introspection-mcp")) )
+("emacs_introspection" . (:command "npx" :args ("-y" "@lnajt/emacs-introspection-mcp")) )
 #+end_src
+
+
+* Implementation details
+
+** describe_function
+Gets the documentation for an Emacs function by name.
+- Parameter: function_name (string)
+- Implementation: Uses `emacsclient` to call `(documentation 'function-name)`
+
+** describe_variable
+Gets the documentation for an Emacs variable by name.
+- Parameter: variable_name (string)
+- Implementation: Uses `emacsclient` to call `(documentation-property 'variable-name 'variable-documentation)`
+
+** get_variable_value
+Gets the current value of an Emacs variable by name.
+- Parameter: variable_name (string)
+- Implementation: Uses `emacsclient` to evaluate the variable name directly
