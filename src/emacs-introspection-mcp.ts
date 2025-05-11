@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import { FastMCP } from "fastmcp";
 import { z } from "zod";
 import { execSync } from "child_process";
