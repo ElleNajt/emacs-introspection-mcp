@@ -17,7 +17,7 @@ const mcp = new fastmcp_1.FastMCP({
     name: "emacs-introspection",
     version: "1.0.0",
 });
-// TODO[A5OhAyxaiJ] Overly restrictive? Note sufficient sanitization?
+// TODO[A5OhAyxaiJ] Overly restrictive? Not sufficient sanitization?
 const isValidEmacsSymbol = (str) => /^[a-zA-Z0-9-_]+$/.test(str);
 mcp.addTool({
     name: "describe_function",
@@ -27,9 +27,17 @@ mcp.addTool({
             .string()
             .refine(isValidEmacsSymbol, "Invalid Emacs symbol name"),
     }),
+    // Using execfile because it is safe from shell injection.
+    // https://nodejs.org/api/child_process.html#child_processexecfilefile-args-options-callback
     execute: (args) => __awaiter(void 0, void 0, void 0, function* () {
-        const cmd = `emacsclient -e "(documentation '${args.function_name})"`;
-        return (0, child_process_1.execSync)(cmd, { encoding: "utf8" }).trim();
+        return new Promise((resolve, reject) => {
+            (0, child_process_1.execFile)("emacsclient", ["-e", `(documentation '${args.function_name})`], { encoding: "utf8", shell: false }, (error, stdout, stderr) => {
+                if (error) {
+                    reject(error);
+                }
+                resolve(stdout.trim());
+            });
+        });
     }),
 });
 mcp.addTool({
@@ -41,8 +49,17 @@ mcp.addTool({
             .refine(isValidEmacsSymbol, "Invalid Emacs symbol name"),
     }),
     execute: (args) => __awaiter(void 0, void 0, void 0, function* () {
-        const cmd = `emacsclient -e "(documentation-property '${args.variable_name} 'variable-documentation)"`;
-        return (0, child_process_1.execSync)(cmd, { encoding: "utf8" }).trim();
+        return new Promise((resolve, reject) => {
+            (0, child_process_1.execFile)("emacsclient", [
+                "-e",
+                `(documentation-property '${args.variable_name} 'variable-documentation)`,
+            ], { encoding: "utf8", shell: false }, (error, stdout, stderr) => {
+                if (error) {
+                    reject(error);
+                }
+                resolve(stdout.trim());
+            });
+        });
     }),
 });
 mcp.addTool({
@@ -54,8 +71,14 @@ mcp.addTool({
             .refine(isValidEmacsSymbol, "Invalid Emacs symbol name"),
     }),
     execute: (args) => __awaiter(void 0, void 0, void 0, function* () {
-        const cmd = `emacsclient -e "${args.variable_name}"`;
-        return (0, child_process_1.execSync)(cmd, { encoding: "utf8" }).trim();
+        return new Promise((resolve, reject) => {
+            (0, child_process_1.execFile)("emacsclient", ["-e", `(symbol-value '${args.variable_name})`], { encoding: "utf8", shell: false }, (error, stdout, stderr) => {
+                if (error) {
+                    reject(error);
+                }
+                resolve(stdout.trim());
+            });
+        });
     }),
 });
 mcp.start({
