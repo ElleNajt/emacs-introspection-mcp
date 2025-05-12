@@ -13,10 +13,10 @@ This server currently provides three tools for interacting with Emacs:
 All of these evaluate elisp via the emacsclient, even if they do so in a relatively controlled way, such as:
 
 #+begin_src bash
-`emacsclient -e "(documentation $FUNCTION_NAME)"`
+`emacsclient -e "(documentation '$FUNCTION_NAME)"`
 #+end_src
 
-I don't currently know how to be positive that this is secure from weird input from the LLM. Currently inputs are sanitized with the regexp.
+I don't currently know how to be positive that this is secure from weird input from the LLM, though my understanding from the emacs manual is that ' prevents evaluation of the form following it. Currently inputs are sanitized with the regexp.
 
 #+begin_src ts
 const isValidEmacsSymbol = (str: string) => /^[a-zA-Z0-9-_]+$/.test(str);

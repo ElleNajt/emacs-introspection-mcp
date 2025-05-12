@@ -9,7 +9,7 @@ const mcp = new FastMCP({
     version: "1.0.0",
 });
 
-// TODO[A5OhAyxaiJ] Overly restrictive? Note sufficient sanitization?
+// TODO[A5OhAyxaiJ] Overly restrictive? Not sufficient sanitization?
 const isValidEmacsSymbol = (str: string) => /^[a-zA-Z0-9-_]+$/.test(str);
 
 mcp.addTool({
