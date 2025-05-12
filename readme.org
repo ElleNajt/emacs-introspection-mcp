@@ -14,14 +14,13 @@ All of these evaluate elisp via the emacsclient, though they do so in the follow
 
 
 #+begin_src bash
-`emacsclient -e "(documentation 'function_name)"`
-`emacsclient -e "(documentation-property 'variable-name 'variable-documentation)"`
-`emacsclient -e "(symbol-value 'variable-name )
-"`
+`emacsclient -e "(documentation '$FUNCTION_NAME)"`
+`emacsclient -e "(documentation-property '$VARIABLE_NAME 'variable-documentation)"`
+`emacsclient -e "(symbol-value '$VARIABLE_NAME)"`
 #+end_src
 
 The security measures to prevent weird injections from the LLM are:
-- Using ', which in my understanding prevents evaluation of the form following it, unlike backtick (which would be vulnerable to an LLM passing in a , to escape the symbolization.)
+- Using ', which in my understanding prevents evaluation of the form following it, unlike backtick (which would be vulnerable to an LLM passing in a , to escape the quoting.)
 - Using execFile with shell=false to on the typescript side, to prevent shell injection
 - Sanitized with this regexp:
 
