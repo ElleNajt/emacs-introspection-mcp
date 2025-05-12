@@ -10,13 +10,20 @@ This server currently provides three tools for interacting with Emacs:
 3. `get_variable_value` - Gets the current value of an Emacs variable
 * *Warning*
 
-All of these evaluate elisp via the emacsclient, even if they do so in a relatively controlled way, such as:
+All of these evaluate elisp via the emacsclient, though they do so in the following controlled ways:
+
 
 #+begin_src bash
-`emacsclient -e "(documentation '$FUNCTION_NAME)"`
+`emacsclient -e "(documentation 'function_name)"`
+`emacsclient -e "(documentation-property 'variable-name 'variable-documentation)"`
+`emacsclient -e "(symbol-value 'variable-name )
+"`
 #+end_src
 
-I don't currently know how to be positive that this is secure from weird input from the LLM, though my understanding from the emacs manual is that ' prevents evaluation of the form following it. On the typescript side I am using execFile with shell set to false. Currently inputs are sanitized with the regexp, also.
+The security measures to prevent weird injections from the LLM are:
+- Using ', which in my understanding prevents evaluation of the form following it, unlike backtick (which would be vulnerable to an LLM passing in a , to escape the symbolization.)
+- Using execFile with shell=false to on the typescript side, to prevent shell injection
+- Sanitized with this regexp:
 
 #+begin_src ts
 const isValidEmacsSymbol = (str: string) => /^[a-zA-Z0-9-_]+$/.test(str);
