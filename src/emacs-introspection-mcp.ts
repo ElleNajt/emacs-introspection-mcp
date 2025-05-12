@@ -2,7 +2,7 @@
 
 import { FastMCP } from "fastmcp";
 import { z } from "zod";
-import { execSync } from "child_process";
+import { execFile } from "child_process";
 
 const mcp = new FastMCP({
     name: "emacs-introspection",
@@ -20,9 +20,23 @@ mcp.addTool({
             .string()
             .refine(isValidEmacsSymbol, "Invalid Emacs symbol name"),
     }),
+
+    // Using execfile because it is safe from shell injection.
+    // https://nodejs.org/api/child_process.html#child_processexecfilefile-args-options-callback
     execute: async (args) => {
-        const cmd = `emacsclient -e "(documentation '${args.function_name})"`;
-        return execSync(cmd, { encoding: "utf8" }).trim();
+        return new Promise((resolve, reject) => {
+            execFile(
+                "emacsclient",
+                ["-e", `(documentation '${args.function_name})`],
+                { encoding: "utf8", shell: false },
+                (error, stdout, stderr) => {
+                    if (error) {
+                        reject(error);
+                    }
+                    resolve(stdout.trim());
+                },
+            );
+        });
     },
 });
 
@@ -35,8 +49,22 @@ mcp.addTool({
             .refine(isValidEmacsSymbol, "Invalid Emacs symbol name"),
     }),
     execute: async (args) => {
-        const cmd = `emacsclient -e "(documentation-property '${args.variable_name} 'variable-documentation)"`;
-        return execSync(cmd, { encoding: "utf8" }).trim();
+        return new Promise((resolve, reject) => {
+            execFile(
+                "emacsclient",
+                [
+                    "-e",
+                    `(documentation-property '${args.variable_name} 'variable-documentation)`,
+                ],
+                { encoding: "utf8", shell: false },
+                (error, stdout, stderr) => {
+                    if (error) {
+                        reject(error);
+                    }
+                    resolve(stdout.trim());
+                },
+            );
+        });
     },
 });
 
@@ -49,8 +77,19 @@ mcp.addTool({
             .refine(isValidEmacsSymbol, "Invalid Emacs symbol name"),
     }),
     execute: async (args) => {
-        const cmd = `emacsclient -e "${args.variable_name}"`;
-        return execSync(cmd, { encoding: "utf8" }).trim();
+        return new Promise((resolve, reject) => {
+            execFile(
+                "emacsclient",
+                ["-e", `(symbol-value '${args.variable_name})`],
+                { encoding: "utf8", shell: false },
+                (error, stdout, stderr) => {
+                    if (error) {
+                        reject(error);
+                    }
+                    resolve(stdout.trim());
+                },
+            );
+        });
     },
 });
 
