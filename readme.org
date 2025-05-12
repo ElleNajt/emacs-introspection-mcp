@@ -1,5 +1,7 @@
 #+title: Readme
 
+**Warning** All of these evaluate elisp via the emacsclient, even if they do so in a relatively controlled way (e.g. `emacsclient -e "(documentation $FUNCTION_NAME)"`). I don't currently know how to be positive that this is secure from weird input from the LLM.
+
 A simple MCP server for emacs introspection through the emacsclient daemon.
 
 This server currently provides three tools for interacting with Emacs:
