@@ -1,6 +1,5 @@
 #+title: Readme
 
-**Warning** All of these evaluate elisp via the emacsclient, even if they do so in a relatively controlled way (e.g. `emacsclient -e "(documentation $FUNCTION_NAME)"`). I don't currently know how to be positive that this is secure from weird input from the LLM.
 
 A simple MCP server for emacs introspection through the emacsclient daemon.
 
@@ -9,6 +8,19 @@ This server currently provides three tools for interacting with Emacs:
 1. `describe_function` - Retrieves documentation for Emacs functions
 2. `describe_variable` - Retrieves documentation for Emacs variables
 3. `get_variable_value` - Gets the current value of an Emacs variable
+* *Warning*
+
+All of these evaluate elisp via the emacsclient, even if they do so in a relatively controlled way, such as:
+
+#+begin_src bash
+`emacsclient -e "(documentation $FUNCTION_NAME)"`
+#+end_src
+
+I don't currently know how to be positive that this is secure from weird input from the LLM. Currently inputs are sanitized with the regexp.
+
+#+begin_src ts
+const isValidEmacsSymbol = (str: string) => /^[a-zA-Z0-9-_]+$/.test(str);
+#+end_src
 
 * Installation
 
