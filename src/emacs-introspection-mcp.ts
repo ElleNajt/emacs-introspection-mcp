@@ -9,11 +9,16 @@ const mcp = new FastMCP({
     version: "1.0.0",
 });
 
+// TODO[A5OhAyxaiJ] Overly restrictive? Note sufficient sanitization?
+const isValidEmacsSymbol = (str: string) => /^[a-zA-Z0-9-_]+$/.test(str);
+
 mcp.addTool({
     name: "describe_function",
     description: "Get documentation for an Emacs function",
     parameters: z.object({
-        function_name: z.string(),
+        function_name: z
+            .string()
+            .refine(isValidEmacsSymbol, "Invalid Emacs symbol name"),
     }),
     execute: async (args) => {
         const cmd = `emacsclient -e "(documentation '${args.function_name})"`;
@@ -25,7 +30,9 @@ mcp.addTool({
     name: "describe_variable",
     description: "Get documentation for an Emacs variable",
     parameters: z.object({
-        variable_name: z.string(),
+        variable_name: z
+            .string()
+            .refine(isValidEmacsSymbol, "Invalid Emacs symbol name"),
     }),
     execute: async (args) => {
         const cmd = `emacsclient -e "(documentation-property '${args.variable_name} 'variable-documentation)"`;
@@ -37,7 +44,9 @@ mcp.addTool({
     name: "get_variable_value",
     description: "Get the current value of an Emacs variable",
     parameters: z.object({
-        variable_name: z.string(),
+        variable_name: z
+            .string()
+            .refine(isValidEmacsSymbol, "Invalid Emacs symbol name"),
     }),
     execute: async (args) => {
         const cmd = `emacsclient -e "${args.variable_name}"`;
