@@ -3,6 +3,8 @@
 import { FastMCP } from "fastmcp";
 import { z } from "zod";
 import { execFile } from "child_process";
+import { writeFileSync, mkdirSync } from "fs";
+import { join } from "path";
 
 const mcp = new FastMCP({
     name: "emacs-introspection",
@@ -87,6 +89,75 @@ mcp.addTool({
                         reject(error);
                     }
                     resolve(stdout.trim());
+                },
+            );
+        });
+    },
+});
+
+mcp.addTool({
+    name: "view_buffer",
+    description: "Get the contents of a specific Emacs buffer and write it to .tmp/<buffer_name>.txt. Returns the file path so Claude can use other tools like Read, Grep, etc. to analyze the buffer content.",
+    parameters: z.object({
+        buffer_name: z.string().min(1, "Buffer name cannot be empty"),
+    }),
+    execute: async (args) => {
+        return new Promise((resolve, reject) => {
+            execFile(
+                "emacsclient",
+                ["-e", `(with-current-buffer "${args.buffer_name}" (buffer-string))`],
+                { encoding: "utf8", shell: false },
+                (error, stdout, stderr) => {
+                    if (error) {
+                        reject(error);
+                    }
+                    
+                    const content = stdout.trim();
+                    
+                    try {
+                        // Ensure .tmp directory exists
+                        mkdirSync(".tmp", { recursive: true });
+                        
+                        // Create filename from buffer name (sanitize special characters)
+                        const sanitizedBufferName = args.buffer_name.replace(/[^a-zA-Z0-9-_]/g, "_");
+                        const filename = join(".tmp", `${sanitizedBufferName}.txt`);
+                        
+                        writeFileSync(filename, content, "utf8");
+                        resolve(`Buffer content written to ${filename}`);
+                    } catch (writeError) {
+                        reject(new Error(`Failed to write file: ${writeError}`));
+                    }
+                },
+            );
+        });
+    },
+});
+
+mcp.addTool({
+    name: "get_agenda",
+    description: "Get the org-agenda view and write it to .tmp/agenda_<agenda_type>.txt. Returns the file path so Claude can use other tools like Read, Grep, etc. to analyze the agenda content.",
+    parameters: z.object({
+        agenda_type: z.string().optional().default("a"),
+    }),
+    execute: async (args) => {
+        return new Promise((resolve, reject) => {
+            // Ensure .tmp directory exists
+            mkdirSync(".tmp", { recursive: true });
+            
+            // Create filename from agenda type
+            const filename = join(".tmp", `agenda_${args.agenda_type}.txt`);
+            const absolutePath = join(process.cwd(), filename);
+            
+            execFile(
+                "emacsclient",
+                ["-e", `(save-window-excursion (let ((org-agenda-window-setup 'current-window)) (org-agenda nil "${args.agenda_type}") (with-current-buffer "*Org Agenda*" (write-file "${absolutePath}"))))`],
+                { encoding: "utf8", shell: false },
+                (error, stdout, stderr) => {
+                    if (error) {
+                        reject(error);
+                    } else {
+                        resolve(`Agenda content written to ${filename}`);
+                    }
                 },
             );
         });
