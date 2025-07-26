@@ -39,6 +39,18 @@ To add this MCP server to Claude Code CLI:
 claude mcp add emacs-introspection npx -y @lnajt/emacs-introspection-mcp
 #+end_src
 
+*** Configuration
+
+The `view_buffer` and `get_agenda` functions write temporary files to `/tmp/ClaudeWorkingFolder/`. You need to add this directory to your Claude Code settings to allow access.
+
+Add the following to your `~/.claude/settings.json`:
+
+#+begin_src json
+{
+  "additionalDirectories": ["/tmp/ClaudeWorkingFolder"]
+}
+#+end_src
+
 You can then use Claude Code with Emacs introspection capabilities:
 - Ask about Emacs functions: "What does the `save-buffer` function do?"
 - Get variable values: "What buffers are currently open in Emacs?"
@@ -80,9 +92,11 @@ Gets the contents of a specific Emacs buffer and writes it to a temporary file.
 - Parameter: buffer_name (string)
 - Implementation: Uses `emacsclient` to call `(with-current-buffer "buffer-name" (buffer-string))`
 - Returns: File path where buffer content was saved for analysis
+- Temporary files: Saved to `/tmp/ClaudeWorkingFolder/<buffer_name>.txt`
 
 ** get_agenda
 Gets the org-agenda view and writes it to a temporary file.
 - Parameter: agenda_type (string, optional, defaults to "a")
 - Implementation: Uses `emacsclient` to call `(save-window-excursion (let ((org-agenda-window-setup 'current-window)) (org-agenda nil "agenda-type") (with-current-buffer "*Org Agenda*" (write-file "path"))))`
 - Returns: File path where agenda content was saved for analysis
+- Temporary files: Saved to `/tmp/ClaudeWorkingFolder/agenda_<agenda_type>.txt`

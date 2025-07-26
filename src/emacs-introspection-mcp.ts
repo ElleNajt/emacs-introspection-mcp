@@ -97,7 +97,7 @@ mcp.addTool({
 
 mcp.addTool({
     name: "view_buffer",
-    description: "Get the contents of a specific Emacs buffer and write it to .tmp/<buffer_name>.txt. Returns the file path so Claude can use other tools like Read, Grep, etc. to analyze the buffer content.",
+    description: "Get the contents of a specific Emacs buffer and write it to /tmp/ClaudeWorkingFolder/<buffer_name>.txt. Returns the file path so Claude can use other tools like Read, Grep, etc. to analyze the buffer content.",
     parameters: z.object({
         buffer_name: z.string().min(1, "Buffer name cannot be empty"),
     }),
@@ -115,12 +115,12 @@ mcp.addTool({
                     const content = stdout.trim();
                     
                     try {
-                        // Ensure .tmp directory exists
-                        mkdirSync(".tmp", { recursive: true });
+                        // Ensure /tmp/ClaudeWorkingFolder directory exists
+                        mkdirSync("/tmp/ClaudeWorkingFolder", { recursive: true });
                         
                         // Create filename from buffer name (sanitize special characters)
                         const sanitizedBufferName = args.buffer_name.replace(/[^a-zA-Z0-9-_]/g, "_");
-                        const filename = join(".tmp", `${sanitizedBufferName}.txt`);
+                        const filename = join("/tmp/ClaudeWorkingFolder", `${sanitizedBufferName}.txt`);
                         
                         writeFileSync(filename, content, "utf8");
                         resolve(`Buffer content written to ${filename}`);
@@ -135,18 +135,18 @@ mcp.addTool({
 
 mcp.addTool({
     name: "get_agenda",
-    description: "Get the org-agenda view and write it to .tmp/agenda_<agenda_type>.txt. Returns the file path so Claude can use other tools like Read, Grep, etc. to analyze the agenda content.",
+    description: "Get the org-agenda view and write it to /tmp/ClaudeWorkingFolder/agenda_<agenda_type>.txt. Returns the file path so Claude can use other tools like Read, Grep, etc. to analyze the agenda content.",
     parameters: z.object({
         agenda_type: z.string().optional().default("a"),
     }),
     execute: async (args) => {
         return new Promise((resolve, reject) => {
-            // Ensure .tmp directory exists
-            mkdirSync(".tmp", { recursive: true });
+            // Ensure /tmp/ClaudeWorkingFolder directory exists
+            mkdirSync("/tmp/ClaudeWorkingFolder", { recursive: true });
             
             // Create filename from agenda type
-            const filename = join(".tmp", `agenda_${args.agenda_type}.txt`);
-            const absolutePath = join(process.cwd(), filename);
+            const filename = join("/tmp/ClaudeWorkingFolder", `agenda_${args.agenda_type}.txt`);
+            const absolutePath = filename;
             
             execFile(
                 "emacsclient",
