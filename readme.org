@@ -43,7 +43,7 @@ claude mcp add emacs-introspection npx -y @lnajt/emacs-introspection-mcp
 
 The `view_buffer` and `get_agenda` functions write temporary files to `/tmp/ClaudeWorkingFolder/`. You need to add this directory to your Claude Code settings to allow access.
 
-Add the following to your `~/.claude/settings.json`:
+Add the following to your `~/.claude/settings.json` under permissions.
 
 #+begin_src json
 {
