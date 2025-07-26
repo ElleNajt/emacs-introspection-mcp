@@ -3,11 +3,13 @@
 
 A simple MCP server for emacs introspection through the emacsclient daemon.
 
-This server currently provides three tools for interacting with Emacs:
+This server currently provides five tools for interacting with Emacs:
 
 1. `describe_function` - Retrieves documentation for Emacs functions
 2. `describe_variable` - Retrieves documentation for Emacs variables
-3. `get_variable_value` - Gets the current value of an Emacs variable
+3. `get_variable_value` - Gets the current value of an Emacs variable (e.g., use `buffer-list` to get all buffers)
+4. `view_buffer` - Gets the contents of a specific buffer and saves it to a file for analysis
+5. `get_agenda` - Gets the org-agenda view
 * *Warning*
 
 All of these evaluate elisp via the emacsclient, though they do so in the following controlled ways:
@@ -29,6 +31,22 @@ const isValidEmacsSymbol = (str: string) => /^[a-zA-Z0-9-_]+$/.test(str);
 #+end_src
 
 * Installation
+** Claude Code
+
+To add this MCP server to Claude Code CLI:
+
+#+begin_src bash
+claude mcp add emacs-introspection npx -y @lnajt/emacs-introspection-mcp
+#+end_src
+
+You can then use Claude Code with Emacs introspection capabilities:
+- Ask about Emacs functions: "What does the `save-buffer` function do?"
+- Get variable values: "What buffers are currently open in Emacs?"
+- View buffer contents: "Show me the contents of my *scratch* buffer"
+- Check your org agenda: "What's on my agenda today?"
+
+
+** Gptel
 
 First, set up [[https://github.com/karthink/gptel][gptel]] and [[https://github.com/lizqwerscott/mcp.el][mcp.el]] .
 
@@ -55,3 +73,16 @@ Gets the documentation for an Emacs variable by name.
 Gets the current value of an Emacs variable by name.
 - Parameter: variable_name (string)
 - Implementation: Uses `emacsclient` to call `(symbol-value 'variable-name )`
+- Example: Use `buffer-list` to get a list of all buffers
+
+** view_buffer
+Gets the contents of a specific Emacs buffer and writes it to a temporary file.
+- Parameter: buffer_name (string)
+- Implementation: Uses `emacsclient` to call `(with-current-buffer "buffer-name" (buffer-string))`
+- Returns: File path where buffer content was saved for analysis
+
+** get_agenda
+Gets the org-agenda view and writes it to a temporary file.
+- Parameter: agenda_type (string, optional, defaults to "a")
+- Implementation: Uses `emacsclient` to call `(save-window-excursion (let ((org-agenda-window-setup 'current-window)) (org-agenda nil "agenda-type") (with-current-buffer "*Org Agenda*" (write-file "path"))))`
+- Returns: File path where agenda content was saved for analysis
