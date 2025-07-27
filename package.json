@@ -14,7 +14,15 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "MCP server for Emacs introspection - view buffers, agenda, and get function/variable documentation",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ElleNajt/emacs-introspection-mcp.git"
+  },
+  "homepage": "https://github.com/ElleNajt/emacs-introspection-mcp",
+  "bugs": {
+    "url": "https://github.com/ElleNajt/emacs-introspection-mcp/issues"
+  },
   "dependencies": {
     "fastmcp": "^1.27.4",
     "zod": "^3.24.4"
