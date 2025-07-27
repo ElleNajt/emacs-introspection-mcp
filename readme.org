@@ -36,7 +36,7 @@ const isValidEmacsSymbol = (str: string) => /^[a-zA-Z0-9-_]+$/.test(str);
 To add this MCP server to Claude Code CLI:
 
 #+begin_src bash
-claude mcp add emacs-introspection npx -y @lnajt/emacs-introspection-mcp
+claude mcp add -s user emacs-introspection npx @lnajt/emacs-introspection-mcp
 #+end_src
 
 *** Configuration
