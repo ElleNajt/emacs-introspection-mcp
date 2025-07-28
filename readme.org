@@ -1,7 +1,5 @@
 #+title: Emacs Introspection MCP Server
 
-Work in progress!
-
 A comprehensive MCP server for Emacs introspection through the emacsclient daemon. This server provides tools for exploring Emacs functions, variables, buffers, keymaps, and more.
 
 * Available Tools
@@ -18,10 +16,10 @@ A comprehensive MCP server for Emacs introspection through the emacsclient daemo
 
 ** Buffer Operations
 - `view_buffer` - Get buffer contents with line numbers (outputs to file)
-- `open_file` - Open a file in Emacs in background and return buffer name
+- `open_file` - Open a file in Emacs in background and return buffer name (restricted to current working directory and /tmp/ClaudeWorkingFolder)
 
 ** Syntax & Code Analysis
-- `check_parens` - Validate parentheses balance in Lisp code files (opens fresh from disk)
+- `check_parens` - Validate parentheses balance in Lisp code files (opens fresh from disk, restricted to current working directory and /tmp/ClaudeWorkingFolder)
 
 ** Org Mode Integration
 - `get_agenda` - Retrieve org-agenda view with customizable agenda type (outputs to file)
@@ -34,8 +32,9 @@ The security measures to prevent injections include:
 - Using execFile with shell=false to prevent shell injection on the TypeScript side
 - Symbol validation with regexp: `/^[a-zA-Z0-9-_:]+$/` for symbols and additional validation for buffer names and file paths
 - Buffer name validation to prevent path traversal attacks
+- File path restrictions: `open_file` and `check_parens` are restricted to the current working directory and `/tmp/ClaudeWorkingFolder` only, with path traversal attack prevention
 
-Additionally, `open_file` and `view_buffer` in combination allow reading any file on your computer. If you also allow Claude unbounded internet access, this creates exfiltration risks ( https://simonwillison.net/tags/lethal-trifecta/ ).
+File access is now limited to safe directories, reducing exfiltration risks compared to unbounded file system access. However, note that the ability to read open buffers in emacs may provide Claude with more information than you are comfortable with, and if you give Claude unlimited access to the web then you may be in danger of exfiltration attacks (( https://simonwillison.net/tags/lethal-trifecta/).
 
 * Installation
 ** Claude Code
