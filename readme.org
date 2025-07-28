@@ -1,34 +1,40 @@
-#+title: Readme
+#+title: Emacs Introspection MCP Server
 
 
-A simple MCP server for emacs introspection through the emacsclient daemon.
+A comprehensive MCP server for Emacs introspection through the emacsclient daemon. This server provides tools for exploring Emacs functions, variables, buffers, keymaps, and more.
 
-This server currently provides five tools for interacting with Emacs:
+* Available Tools
 
-1. `describe_function` - Retrieves documentation for Emacs functions
-2. `describe_variable` - Retrieves documentation for Emacs variables
-3. `get_variable_value` - Gets the current value of an Emacs variable (e.g., use `buffer-list` to get all buffers)
-4. `view_buffer` - Gets the contents of a specific buffer and saves it to a file for analysis
-5. `get_agenda` - Gets the org-agenda view
+** Meta-Tools (Recommended for AI Agents)
+- `emacs_describe` - Get comprehensive documentation for any Emacs symbol (function, variable, or both). Handles Lisp-2 namespace correctly with optional type parameter
+- `emacs_search` - Search for symbols with pattern matching and type filtering (commands, functions, variables, or all) 
+- `emacs_buffer_info` - Complete buffer analysis including content, modes, variables, and metadata (outputs to file)
+- `emacs_keymap_analysis` - Analyze major and minor mode keymaps for a buffer context (outputs to file)
+
+** Core Introspection Tools
+- `get_variable_value` - Get current value of any Emacs variable (e.g., `emacs-version`, `tab-width`)
+- `get_buffer_list` - Get list of all live buffers with optional detailed information
+
+** Buffer Operations
+- `view_buffer` - Get buffer contents with line numbers (outputs to file)
+- `open_file` - Open a file in Emacs in background and return buffer name
+
+** Syntax & Code Analysis
+- `check_parens` - Validate parentheses balance in Lisp code files (opens fresh from disk)
+
+** Org Mode Integration
+- `get_agenda` - Retrieve org-agenda view with customizable agenda type (outputs to file)
 * *Warning*
 
-All of these evaluate elisp via the emacsclient, though they do so in the following controlled ways:
+All tools evaluate elisp via the emacsclient with controlled security measures. The server uses various elisp operations including symbol introspection, buffer operations, apropos searches, and advanced buffer/keymap analysis.
 
+The security measures to prevent injections include:
+- Using single quotes (') to prevent evaluation of forms, unlike backtick which would be vulnerable to comma escaping
+- Using execFile with shell=false to prevent shell injection on the TypeScript side
+- Symbol validation with regexp: `/^[a-zA-Z0-9-_:]+$/` for symbols and additional validation for buffer names and file paths
+- Buffer name validation to prevent path traversal attacks
 
-#+begin_src bash
-`emacsclient -e "(documentation '$FUNCTION_NAME)"`
-`emacsclient -e "(documentation-property '$VARIABLE_NAME 'variable-documentation)"`
-`emacsclient -e "(symbol-value '$VARIABLE_NAME)"`
-#+end_src
-
-The security measures to prevent weird injections from the LLM are:
-- Using ', which in my understanding prevents evaluation of the form following it, unlike backtick (which would be vulnerable to an LLM passing in a , to escape the quoting.)
-- Using execFile with shell=false to on the typescript side, to prevent shell injection
-- Sanitized with this regexp:
-
-#+begin_src ts
-const isValidEmacsSymbol = (str: string) => /^[a-zA-Z0-9-_]+$/.test(str);
-#+end_src
+Additionally, `open_file` and `view_buffer` in combination allow reading any file on your computer. If you also allow Claude unbounded internet access, this creates exfiltration risks ( https://simonwillison.net/tags/lethal-trifecta/ ).
 
 * Installation
 ** Claude Code
@@ -55,7 +61,9 @@ You can then use Claude Code with Emacs introspection capabilities:
 - Ask about Emacs functions: "What does the `save-buffer` function do?"
 - Get variable values: "What buffers are currently open in Emacs?"
 - View buffer contents: "Show me the contents of my *scratch* buffer"
+- Analyze buffer context: "What keybindings are available in my current buffer?"
 - Check your org agenda: "What's on my agenda today?"
+- Explore Emacs symbols: "Find all commands related to 'save'"
 
 
 ** Gptel
@@ -69,34 +77,63 @@ Then, add this to your the mcp-hub-servers variable:
 #+end_src
 
 
-* Implementation details
+* Recommended Usage
 
-** describe_function
-Gets the documentation for an Emacs function by name.
-- Parameter: function_name (string)
-- Implementation: Uses `emacsclient` to call `(documentation 'function-name)`
+** For AI Agents
+The meta-tools are specifically designed for optimal AI agent experience:
 
-** describe_variable
-Gets the documentation for an Emacs variable by name.
-- Parameter: variable_name (string)
-- Implementation: Uses `emacsclient` to call `(documentation-property 'variable-name 'variable-documentation)`
+- **`emacs_describe`** - Provides comprehensive symbol documentation with proper Lisp-2 namespace handling
+- **`emacs_search`** - Unified search interface with type filtering for efficient symbol discovery
+- **`emacs_buffer_info`** - Complete buffer context including modes, variables, and content
+- **`emacs_keymap_analysis`** - Contextual keymap information for understanding available commands
 
-** get_variable_value
-Gets the current value of an Emacs variable by name.
-- Parameter: variable_name (string)
-- Implementation: Uses `emacsclient` to call `(symbol-value 'variable-name )`
-- Example: Use `buffer-list` to get a list of all buffers
+** Common Workflows
+1. **Exploring Unknown Codebase**: `emacs_buffer_info` → `emacs_search` → `emacs_describe`
+2. **Understanding Functions**: `emacs_search` → `emacs_describe` (with key bindings)
+3. **Buffer Investigation**: `get_buffer_list` → `emacs_buffer_info` → `view_buffer`
+4. **Workflow Analysis**: `get_agenda` → `emacs_buffer_info` for org files
 
-** view_buffer
-Gets the contents of a specific Emacs buffer and writes it to a temporary file.
-- Parameter: buffer_name (string)
-- Implementation: Uses `emacsclient` to call `(with-current-buffer "buffer-name" (buffer-string))`
-- Returns: File path where buffer content was saved for analysis
-- Temporary files: Saved to `/tmp/ClaudeWorkingFolder/<buffer_name>.txt`
+** File Output Benefits
+Large results are written to `/tmp/ClaudeWorkingFolder/` enabling:
+- Analysis of extensive data without token limits
+- Further processing with other tools
+- Persistent reference during conversation
 
-** get_agenda
-Gets the org-agenda view and writes it to a temporary file.
-- Parameter: agenda_type (string, optional, defaults to "a")
-- Implementation: Uses `emacsclient` to call `(save-window-excursion (let ((org-agenda-window-setup 'current-window)) (org-agenda nil "agenda-type") (with-current-buffer "*Org Agenda*" (write-file "path"))))`
-- Returns: File path where agenda content was saved for analysis
-- Temporary files: Saved to `/tmp/ClaudeWorkingFolder/agenda_<agenda_type>.txt`
+* LSP Support
+
+LSP tools (`eglot_help_at_point`, `eglot_find_definition`, `eglot_find_references`) are available in `/src/eglot-tools.ts` but currently not working. They require proper eglot configuration and will be integrated when LSP support is functional.
+
+* Implementation Details
+
+** Security Measures
+All tools evaluate elisp via emacsclient with controlled security:
+- Uses single quotes to prevent evaluation (no backtick vulnerability)
+- Uses `execFile` with `shell=false` to prevent shell injection
+- Symbol validation with regexp: `/^[a-zA-Z0-9-_]+$/` for basic symbols
+- Buffer name validation to prevent path traversal
+
+** File Output
+Large data (buffers, keymaps, agenda) is written to `/tmp/ClaudeWorkingFolder/` to handle size limitations and enable further analysis with other tools.
+
+** Core Functions
+The server implements the following elisp operations:
+- **Symbol Documentation**: `(describe-function)` and `(describe-variable)` with comprehensive Help buffer output
+- **Variable Values**: `(symbol-value 'symbol)`  
+- **Buffer Lists**: `(buffer-list)` with optional detailed buffer information including file paths, sizes, and modification status
+- **Buffer Content**: `(with-current-buffer "name" (buffer-string))` with line numbering and metadata
+- **Symbol Search**: Unified interface to `apropos-*` functions with type filtering (commands, functions, variables, all)
+- **Buffer Analysis**: Complete mode, variable, and content introspection with mode descriptions
+- **Keymap Analysis**: Major and minor mode keymap exploration with comprehensive key binding analysis
+- **Syntax Checking**: `check-parens` integration for Lisp code validation with precise error location reporting
+- **File Operations**: Background file opening with `find-file-noselect` and buffer name return
+- **Org Integration**: Agenda view extraction with customizable agenda types
+
+** Testing
+All tools have been tested and verified working with:
+- Emacs 30.1 
+- Basic connection and variable retrieval
+- Buffer operations and error handling
+- Symbol search and documentation
+- Meta-tools for comprehensive analysis
+- Org agenda integration
+- Syntax checking capabilities
