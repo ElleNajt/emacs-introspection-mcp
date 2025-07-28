@@ -1,5 +1,6 @@
 #+title: Emacs Introspection MCP Server
 
+Work in progress!
 
 A comprehensive MCP server for Emacs introspection through the emacsclient daemon. This server provides tools for exploring Emacs functions, variables, buffers, keymaps, and more.
 
