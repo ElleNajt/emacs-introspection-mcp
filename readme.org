@@ -18,11 +18,22 @@ A comprehensive MCP server for Emacs introspection through the emacsclient daemo
 - `view_buffer` - Get buffer contents with line numbers (outputs to file)
 - `open_file` - Open a file in Emacs in background and return buffer name (restricted to current working directory and /tmp/ClaudeWorkingFolder)
 
+** Workspace Management
+- `get_workspace_buffers` - Get list of buffers in each workspace (outputs to file)
+- `create_workspace` - Create a new workspace with given name
+- `rename_workspace` - Rename a workspace by name or identifier
+- `delete_workspace` - Delete a workspace by name or identifier
+- `move_buffer_to_workspace` - Move a buffer to a specific workspace (works with both Doom workspaces and Eyebrowse)
+
 ** Syntax & Code Analysis
 - `check_parens` - Validate parentheses balance in Lisp code files (opens fresh from disk, restricted to current working directory and /tmp/ClaudeWorkingFolder)
 
 ** Org Mode Integration
 - `get_agenda` - Retrieve org-agenda view with customizable agenda type (outputs to file)
+- `org_get_all_todos` - Get all TODO items from org files, including unscheduled ones (outputs to file)
+- `org_schedule_todo` - Schedule a TODO item by adding SCHEDULED property to headings
+- `org_agenda_todo` - Change the state of agenda items (TODO → DONE, etc.) by line number or heading text
+- `org_capture` - Add new items via org-capture with immediate completion (default) or buffer editing
 * *Warning*
 
 All tools evaluate elisp via the emacsclient with controlled security measures. The server uses various elisp operations including symbol introspection, buffer operations, apropos searches, and advanced buffer/keymap analysis.
@@ -30,7 +41,7 @@ All tools evaluate elisp via the emacsclient with controlled security measures. 
 The security measures to prevent injections include:
 - Using single quotes (') to prevent evaluation of forms, unlike backtick which would be vulnerable to comma escaping
 - Using execFile with shell=false to prevent shell injection on the TypeScript side
-- Symbol validation with regexp: `/^[a-zA-Z0-9-_:]+$/` for symbols and additional validation for buffer names and file paths
+- Symbol validation with regexp: `/^[a-zA-Z0-9\-_/+:]+$/` for symbols (expanded to support workspace naming) and additional validation for buffer names and file paths
 - Buffer name validation to prevent path traversal attacks
 - File path restrictions: `open_file` and `check_parens` are restricted to the current working directory and `/tmp/ClaudeWorkingFolder` only, with path traversal attack prevention
 
@@ -63,7 +74,10 @@ You can then use Claude Code with Emacs introspection capabilities:
 - View buffer contents: "Show me the contents of my *scratch* buffer"
 - Analyze buffer context: "What keybindings are available in my current buffer?"
 - Check your org agenda: "What's on my agenda today?"
+- Manage org tasks: "Add a new todo item", "Mark my first agenda item as done", or "Schedule this task for tomorrow"
+- Get all todos: "Show me all my TODO items across all org files"
 - Explore Emacs symbols: "Find all commands related to 'save'"
+- Organize workspaces: "Clean up my workspaces and reorganize buffers by project"
 
 
 ** Gptel
@@ -91,13 +105,79 @@ The meta-tools are specifically designed for optimal AI agent experience:
 1. **Exploring Unknown Codebase**: `emacs_buffer_info` → `emacs_search` → `emacs_describe`
 2. **Understanding Functions**: `emacs_search` → `emacs_describe` (with key bindings)
 3. **Buffer Investigation**: `get_buffer_list` → `emacs_buffer_info` → `view_buffer`
-4. **Workflow Analysis**: `get_agenda` → `emacs_buffer_info` for org files
+4. **Workflow Analysis**: `get_agenda` → `org_get_all_todos` → `emacs_buffer_info` for org files
+5. **Task Management**: `org_get_all_todos` → `org_schedule_todo` → `org_agenda_todo` → `org_capture`
+6. **Buffer Reorganization**: `get_workspace_buffers` → `get_buffer_list` → `create_workspace` → `move_buffer_to_workspace` → `delete_workspace`
 
 ** File Output Benefits
 Large results are written to `/tmp/ClaudeWorkingFolder/` enabling:
 - Analysis of extensive data without token limits
 - Further processing with other tools
 - Persistent reference during conversation
+
+** Buffer Reorganization Example
+A complete workflow to reorganize scattered buffers into project-specific workspaces:
+
+#+begin_example
+# 1. Assess current state
+get_workspace_buffers()        # See all buffers across workspaces
+get_buffer_list(true)          # Get detailed buffer list with file paths
+
+# 2. Create project workspaces
+create_workspace("Frontend")    # Web development files
+create_workspace("Backend")     # Server-side code
+create_workspace("Config")      # Configuration files
+create_workspace("Docs")        # Documentation and notes
+
+# 3. Organize by project type
+move_buffer_to_workspace("package.json", "Frontend")
+move_buffer_to_workspace("src/components/App.jsx", "Frontend")
+move_buffer_to_workspace("styles/main.css", "Frontend")
+
+move_buffer_to_workspace("server.py", "Backend")
+move_buffer_to_workspace("models/user.py", "Backend")
+move_buffer_to_workspace("database/schema.sql", "Backend")
+
+move_buffer_to_workspace("init.el", "Config")
+move_buffer_to_workspace(".vimrc", "Config")
+move_buffer_to_workspace("config.yaml", "Config")
+
+move_buffer_to_workspace("README.md", "Docs")
+move_buffer_to_workspace("*Help*", "Docs")
+move_buffer_to_workspace("todo.org", "Docs")
+
+# 4. Clean up
+delete_workspace("old-mixed-workspace")
+get_workspace_buffers()        # Verify final organization
+#+end_example
+
+** Comprehensive Task Management Example
+A complete workflow to review, organize, and manage org-mode tasks:
+
+#+begin_example
+# 1. Review current state
+get_agenda()                   # See today's scheduled items
+org_get_all_todos()           # Get all TODO items including unscheduled
+
+# 2. Schedule unscheduled tasks
+org_schedule_todo("~/Documents/Notes/inbox.org", "Review project proposal", "today")
+org_schedule_todo("~/Documents/Notes/tasks.org", "Call dentist", "+2d")
+org_schedule_todo("~/Documents/Notes/work.org", "Prepare presentation", "2025-01-20 09:00")
+
+# 3. Update task states
+org_agenda_todo("agenda_line", "3", "DONE")           # Mark agenda line 3 as done
+org_agenda_todo("org_heading", "Buy groceries", "WAITING", 
+                org_file="~/Documents/Notes/personal.org")  # Change specific heading
+
+# 4. Add new tasks via capture
+org_capture()                                          # Show available templates
+org_capture("t", "Follow up on meeting notes")        # Quick task capture
+org_capture("n", "Ideas for weekend project", false)  # Open capture buffer for editing
+
+# 5. Final review
+get_agenda()                   # Check updated agenda
+org_get_all_todos()           # Verify all tasks are properly organized
+#+end_example
 
 * LSP Support
 
@@ -109,7 +189,7 @@ LSP tools (`eglot_help_at_point`, `eglot_find_definition`, `eglot_find_reference
 All tools evaluate elisp via emacsclient with controlled security:
 - Uses single quotes to prevent evaluation (no backtick vulnerability)
 - Uses `execFile` with `shell=false` to prevent shell injection
-- Symbol validation with regexp: `/^[a-zA-Z0-9-_]+$/` for basic symbols
+- Symbol validation with regexp: `/^[a-zA-Z0-9\-_/+:]+$/` for symbols (expanded to support workspace naming)
 - Buffer name validation to prevent path traversal
 
 ** File Output
@@ -126,7 +206,7 @@ The server implements the following elisp operations:
 - **Keymap Analysis**: Major and minor mode keymap exploration with comprehensive key binding analysis
 - **Syntax Checking**: `check-parens` integration for Lisp code validation with precise error location reporting
 - **File Operations**: Background file opening with `find-file-noselect` and buffer name return
-- **Org Integration**: Agenda view extraction with customizable agenda types
+- **Org Integration**: Agenda view extraction, comprehensive todo retrieval, scheduling, state management, and item capture with immediate completion
 
 ** Testing
 All tools have been tested and verified working with:

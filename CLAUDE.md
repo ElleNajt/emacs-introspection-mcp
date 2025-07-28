@@ -44,6 +44,14 @@ This MCP server provides tools to introspect and interact with your running Emac
 **`get_variable_value(variable_names)`** - Current values of one or more variables
 **`get_buffer_list(include_details=false)`** - Get list of all live buffers, optionally with detailed info
 
+### Workspace Operations
+
+**`get_workspace_buffers(workspace_name?)`** - Get list of buffers in workspaces (outputs to file)
+**`rename_workspace(workspace_identifier, new_name)`** - Rename a workspace by name or identifier (temporarily switches to workspace, then switches back)
+**`create_workspace(workspace_name)`** - Create a new workspace with the given name
+**`delete_workspace(workspace_identifier)`** - Delete a workspace by name or identifier
+**`move_buffer_to_workspace(buffer_name, workspace_name)`** - Move a buffer to a specific workspace (works with both Doom workspaces and Eyebrowse)
+
 ### Buffer Operations
 
 **`view_buffer(buffer_names)`** - Get contents of one or more buffers, each written to separate file with line numbers
@@ -54,6 +62,10 @@ This MCP server provides tools to introspect and interact with your running Emac
 ### Org Mode
 
 **`get_agenda(agenda_type="a")`** - Get org agenda view (outputs to file)
+**`org_get_all_todos(include_done=false, org_files?)`** - Get all TODO items from org files, including unscheduled ones (outputs to file)
+**`org_schedule_todo(org_file, heading_text, schedule_date, remove_schedule=false)`** - Schedule a TODO item by adding SCHEDULED property
+**`org_agenda_todo(target_type, target, new_state?, agenda_type?, org_file?)`** - Change agenda item state
+**`org_capture(template_key?, content?, immediate_finish=true)`** - Add new items via org-capture (immediate_finish=true completes capture without opening buffer)
 
 ## Common Use Cases
 
@@ -78,11 +90,54 @@ This MCP server provides tools to introspect and interact with your running Emac
 4. view_buffer(["*scratch*", "*Messages*", "main.py"]) → get content of multiple buffers
 ```
 
+### Workspace Management
+```
+1. get_workspace_buffers() → see buffers in all workspaces
+2. get_workspace_buffers("workspace-name") → see buffers in specific workspace
+3. create_workspace("Development") → create new workspace named "Development"
+4. rename_workspace("main", "Code") → rename workspace "main" to "Code"
+5. rename_workspace("#1", "Notes") → rename workspace "#1" to "Notes"
+6. delete_workspace("old-workspace") → delete workspace by name
+7. move_buffer_to_workspace("config.el", "Config") → move config.el buffer to Config workspace
+```
+
+### Buffer Reorganization Workflow
+```
+1. get_workspace_buffers() → assess current buffer distribution across workspaces
+2. get_buffer_list(true) → get comprehensive list of all buffers with details
+3. create_workspace("Frontend") → create project-specific workspaces
+4. create_workspace("Backend") 
+5. create_workspace("Config")
+6. create_workspace("Documentation")
+7. move_buffer_to_workspace("package.json", "Frontend") → organize by project type
+8. move_buffer_to_workspace("src/app.js", "Frontend")
+9. move_buffer_to_workspace("server.py", "Backend")
+10. move_buffer_to_workspace("database.sql", "Backend")
+11. move_buffer_to_workspace("init.el", "Config")
+12. move_buffer_to_workspace(".gitignore", "Config")
+13. move_buffer_to_workspace("README.md", "Documentation")
+14. move_buffer_to_workspace("*Help*", "Documentation") → organize utility buffers
+15. delete_workspace("old-mixed-workspace") → clean up unused workspaces
+16. get_workspace_buffers() → verify final organization
+```
+
 ### Workflow Analysis
 ```
 1. get_agenda() → see current org agenda  
 2. emacs_buffer_info(["todo.org"]) → analyze org file structure
 3. emacs_search("org-", "commands") → find org commands
+```
+
+### Managing Agenda Items
+```
+1. get_agenda() → see current agenda
+2. org_get_all_todos() → get all TODO items including unscheduled ones
+3. org_schedule_todo("~/Documents/Notes/inbox.org", "Test capture from Claude", "today") → schedule a TODO
+4. org_agenda_todo("agenda_line", "3", "DONE") → mark item on line 3 as done
+5. org_agenda_todo("org_heading", "Buy groceries", "TODO", org_file="/path/to/todo.org") → change specific heading
+6. org_capture() → see available capture templates
+7. org_capture("t", "New task from Claude") → quick task capture (completes immediately)
+8. org_capture("t", "New task", false) → open capture buffer for editing
 ```
 
 ### Debugging Elisp Syntax Errors

@@ -40,7 +40,11 @@ const isValidFilePath = (filePath: string): boolean => {
 };
 
 // TODO[A5OhAyxaiJ] Overly restrictive? Not sufficient sanitization?
-const isValidEmacsSymbol = (str: string) => /^[a-zA-Z0-9-_]+$/.test(str);
+const isValidEmacsSymbol = (str: string) => {
+    // Allow common Emacs symbol characters including those needed for Doom workspaces
+    // Specifically: letters, numbers, hyphens, underscores, forward slashes, plus signs, colons
+    return /^[a-zA-Z0-9\-_/+:]+$/.test(str) && str.length > 0 && str.length < 100;
+};
 
 
 
@@ -554,6 +558,582 @@ mcp.addTool({
 });
 
 mcp.addTool({
+    name: "org_agenda_todo",
+    description: "Change the state of an agenda item (e.g., TODO -> DONE). Can target items by line number in agenda buffer or by heading text in org files.",
+    parameters: z.object({
+        target_type: z.enum(["agenda_line", "org_heading"]).describe("Whether to target by agenda line number or org file heading"),
+        target: z.string().describe("Either agenda line number (1-based) or heading text to search for"),
+        new_state: z.string().optional().describe("New TODO state (if not provided, cycles through states)"),
+        agenda_type: z.string().optional().default("a").describe("Agenda type to work with (default 'a')"),
+        org_file: z.string().optional().describe("Specific org file path (required for org_heading type)"),
+    }),
+    execute: async (args) => {
+        return new Promise((resolve, reject) => {
+            let elisp: string;
+            
+            if (args.target_type === "agenda_line") {
+                // Work with agenda buffer directly
+                const stateChange = args.new_state ? `"${args.new_state}"` : "nil";
+                elisp = `(save-window-excursion
+                    (let ((org-agenda-window-setup 'current-window))
+                      (org-agenda nil "${args.agenda_type}")
+                      (with-current-buffer "*Org Agenda*"
+                        (goto-char (point-min))
+                        (forward-line (1- ${parseInt(args.target)}))
+                        (if (org-agenda-check-type nil 'agenda 'todo 'tags 'search)
+                            (progn
+                              (org-agenda-todo ${stateChange})
+                              (format "Successfully changed state of item at line %s" "${args.target}"))
+                          (error "No valid agenda item found at line %s" "${args.target}")))))`;
+            } else {
+                // Work with org file directly
+                if (!args.org_file) {
+                    reject(new Error("org_file parameter is required when target_type is 'org_heading'"));
+                    return;
+                }
+                
+                if (!isValidFilePath(args.org_file)) {
+                    reject(new Error("Invalid or restricted file path"));
+                    return;
+                }
+                
+                const stateChange = args.new_state ? `"${args.new_state}"` : "nil";
+                elisp = `(save-window-excursion
+                    (find-file "${args.org_file}")
+                    (goto-char (point-min))
+                    (if (search-forward "${args.target}" nil t)
+                        (progn
+                          (org-back-to-heading t)
+                          (org-todo ${stateChange})
+                          (save-buffer)
+                          (format "Successfully changed state of heading '%s' in %s" "${args.target}" "${args.org_file}"))
+                      (error "Heading '%s' not found in %s" "${args.target}" "${args.org_file}")))`;
+            }
+            
+            execFile(
+                "emacsclient",
+                ["-e", elisp],
+                { encoding: "utf8", shell: false },
+                (error, stdout, stderr) => {
+                    if (error) {
+                        reject(error);
+                    } else {
+                        resolve(stdout.trim().replace(/^"(.*)"$/, '$1'));
+                    }
+                },
+            );
+        });
+    },
+});
+
+mcp.addTool({
+    name: "org_capture",
+    description: "Add a new agenda item via org-capture mechanism. Uses existing capture templates or allows custom capture.",
+    parameters: z.object({
+        template_key: z.string().optional().describe("Capture template key (single character). If not provided, will show available templates"),
+        content: z.string().optional().describe("Content to capture. If not provided, will use interactive capture"),
+        immediate_finish: z.boolean().default(true).describe("Whether to immediately finish capture without opening editor"),
+    }),
+    execute: async (args) => {
+        return new Promise((resolve, reject) => {
+            let elisp: string;
+            
+            if (!args.template_key) {
+                // Show available capture templates
+                elisp = `(let ((templates org-capture-templates)
+                              (result "=== AVAILABLE CAPTURE TEMPLATES ===\\n"))
+                          (if templates
+                              (dolist (template templates)
+                                (setq result (concat result 
+                                  (format "%s: %s\\n" 
+                                    (car template) 
+                                    (cadr template)))))
+                            (setq result (concat result "No capture templates configured")))
+                          result)`;
+                
+                execFile(
+                    "emacsclient", 
+                    ["-e", elisp],
+                    { encoding: "utf8", shell: false },
+                    (error, stdout, stderr) => {
+                        if (error) {
+                            reject(error);
+                        } else {
+                            resolve(stdout.trim());
+                        }
+                    }
+                );
+                return;
+            }
+            
+            if (args.content) {
+                // Capture with provided content using org-capture-string
+                if (args.immediate_finish) {
+                    elisp = `(condition-case err
+                        (let ((org-capture-entry (assoc "${args.template_key}" org-capture-templates)))
+                          (if org-capture-entry
+                              (progn
+                                (org-capture-string "${args.content.replace(/"/g, '\\"')}" "${args.template_key}")
+                                (org-capture-finalize)
+                                (format "Successfully captured item using template '%s': %s" "${args.template_key}" "${args.content.replace(/"/g, '\\"')}"))
+                            (error "Capture template '%s' not found" "${args.template_key}")))
+                      (error 
+                        (format "Capture failed: %s" (error-message-string err))))`;
+                } else {
+                    elisp = `(condition-case err
+                        (let ((org-capture-entry (assoc "${args.template_key}" org-capture-templates)))
+                          (if org-capture-entry
+                              (progn
+                                (org-capture-string "${args.content.replace(/"/g, '\\"')}" "${args.template_key}")
+                                (format "Capture buffer opened with template '%s'. Edit and press C-c C-c to finish." "${args.template_key}"))
+                            (error "Capture template '%s' not found" "${args.template_key}")))
+                      (error 
+                        (format "Capture failed: %s" (error-message-string err))))`;
+                }
+            } else {
+                // Interactive capture - start capture process
+                elisp = `(condition-case err
+                    (let ((org-capture-entry (assoc "${args.template_key}" org-capture-templates)))
+                      (if org-capture-entry
+                          (progn
+                            (org-capture nil "${args.template_key}")
+                            (format "Interactive capture started with template '%s'. Edit and press C-c C-c to finish." "${args.template_key}"))
+                        (error "Capture template '%s' not found" "${args.template_key}")))
+                  (error 
+                    (format "Capture failed: %s" (error-message-string err))))`;
+            }
+            
+            execFile(
+                "emacsclient",
+                ["-e", elisp],
+                { encoding: "utf8", shell: false },
+                (error, stdout, stderr) => {
+                    if (error) {
+                        reject(error);
+                    } else {
+                        resolve(stdout.trim().replace(/^"(.*)"$/, '$1'));
+                    }
+                },
+            );
+        });
+    },
+});
+
+mcp.addTool({
+    name: "org_get_all_todos",
+    description: "Get all TODO items from org files, including unscheduled ones. Writes results to /tmp/ClaudeWorkingFolder/all_todos.txt.",
+    parameters: z.object({
+        include_done: z.boolean().default(false).describe("Include DONE items in results"),
+        org_files: z.array(z.string()).optional().describe("Specific org files to search (defaults to org-agenda-files)"),
+    }),
+    execute: async (args) => {
+        return new Promise((resolve, reject) => {
+            // Ensure /tmp/ClaudeWorkingFolder directory exists
+            mkdirSync("/tmp/ClaudeWorkingFolder", { recursive: true });
+            
+            const filename = join("/tmp/ClaudeWorkingFolder", "all_todos.txt");
+            const orgFilesClause = args.org_files 
+                ? `'(${args.org_files.map(f => `"${f}"`).join(" ")})`
+                : "org-agenda-files";
+            
+            const elisp = `(let ((result "=== ALL TODO ITEMS ===\\n")
+                              (files ${orgFilesClause})
+                              (todo-keywords '("TODO" "NEXT" "STARTED" "WAITING" ${args.include_done ? '"DONE" "CANCELLED"' : ''})))
+                          (dolist (file files)
+                            (when (file-exists-p file)
+                              (with-temp-buffer
+                                (insert-file-contents file)
+                                (org-mode)
+                                (goto-char (point-min))
+                                (setq result (concat result "\\n=== FILE: " file " ===\\n"))
+                                (while (re-search-forward "^\\\\*+ \\\\(TODO\\\\|NEXT\\\\|STARTED\\\\|WAITING${args.include_done ? '\\\\|DONE\\\\|CANCELLED' : ''}\\\\) " nil t)
+                                  (let* ((heading-start (line-beginning-position))
+                                         (heading-end (line-end-position))
+                                         (heading-text (buffer-substring heading-start heading-end))
+                                         (scheduled (org-entry-get (point) "SCHEDULED"))
+                                         (deadline (org-entry-get (point) "DEADLINE"))
+                                         (line-num (line-number-at-pos)))
+                                    (setq result (concat result
+                                      (format "Line %d: %s\\n" line-num heading-text)
+                                      (if scheduled (format "  SCHEDULED: %s\\n" scheduled) "")
+                                      (if deadline (format "  DEADLINE: %s\\n" deadline) "")
+                                      "\\n")))))))
+                          (write-region result nil "${filename}")
+                          (format "All TODO items written to %s" "${filename}"))`;
+            
+            execFile(
+                "emacsclient",
+                ["-e", elisp],
+                { encoding: "utf8", shell: false },
+                (error, stdout, stderr) => {
+                    if (error) {
+                        reject(error);
+                    } else {
+                        resolve(stdout.trim().replace(/^"(.*)"$/, '$1'));
+                    }
+                },
+            );
+        });
+    },
+});
+
+mcp.addTool({
+    name: "org_schedule_todo",
+    description: "Schedule a TODO item by adding SCHEDULED property. Can target by heading text in org files.",
+    parameters: z.object({
+        org_file: z.string().describe("Path to the org file containing the heading"),
+        heading_text: z.string().describe("Text of the heading to schedule"),
+        schedule_date: z.string().describe("Date/time to schedule (e.g., '2025-01-15', '2025-01-15 10:00', '+1d', 'today')"),
+        remove_schedule: z.boolean().default(false).describe("Remove existing schedule instead of setting one"),
+    }),
+    execute: async (args) => {
+        return new Promise((resolve, reject) => {
+            if (!isValidFilePath(args.org_file)) {
+                reject(new Error("Invalid or restricted file path"));
+                return;
+            }
+            
+            let elisp: string;
+            
+            if (args.remove_schedule) {
+                elisp = `(save-window-excursion
+                    (find-file "${args.org_file}")
+                    (goto-char (point-min))
+                    (if (search-forward "${args.heading_text}" nil t)
+                        (progn
+                          (org-back-to-heading t)
+                          (org-schedule '(4))
+                          (save-buffer)
+                          (format "Successfully removed schedule from heading '%s' in %s" "${args.heading_text}" "${args.org_file}"))
+                      (error "Heading '%s' not found in %s" "${args.heading_text}" "${args.org_file}")))`;
+            } else {
+                elisp = `(save-window-excursion
+                    (find-file "${args.org_file}")
+                    (goto-char (point-min))
+                    (if (search-forward "${args.heading_text}" nil t)
+                        (progn
+                          (org-back-to-heading t)
+                          (org-schedule nil "${args.schedule_date}")
+                          (save-buffer)
+                          (format "Successfully scheduled heading '%s' for %s in %s" "${args.heading_text}" "${args.schedule_date}" "${args.org_file}"))
+                      (error "Heading '%s' not found in %s" "${args.heading_text}" "${args.org_file}")))`;
+            }
+            
+            execFile(
+                "emacsclient",
+                ["-e", elisp],
+                { encoding: "utf8", shell: false },
+                (error, stdout, stderr) => {
+                    if (error) {
+                        reject(error);
+                    } else {
+                        resolve(stdout.trim().replace(/^"(.*)"$/, '$1'));
+                    }
+                },
+            );
+        });
+    },
+});
+
+mcp.addTool({
+    name: "get_workspace_buffers",
+    description: "Get the list of buffers in each workspace. Writes results to /tmp/ClaudeWorkingFolder/workspace_buffers.txt.",
+    parameters: z.object({
+        workspace_name: z.string().optional().describe("Specific workspace name to get buffers for (if not provided, gets all workspaces)"),
+    }),
+    execute: async (args) => {
+        return new Promise((resolve, reject) => {
+            // Ensure /tmp/ClaudeWorkingFolder directory exists
+            mkdirSync("/tmp/ClaudeWorkingFolder", { recursive: true });
+            
+            const filename = join("/tmp/ClaudeWorkingFolder", "workspace_buffers.txt");
+            
+            let elisp: string;
+            
+            if (args.workspace_name) {
+                elisp = `(let ((result ""))
+                          (cond
+                           ;; Check for Doom workspaces first
+                           ((and (fboundp '+workspace-buffer-list) (fboundp '+workspace-switch))
+                            (condition-case err
+                              (let* ((workspace-names (+workspace-list-names))
+                                     (current-workspace (+workspace-current-name)))
+                                (if (member "${args.workspace_name}" workspace-names)
+                                    (progn
+                                      ;; Switch to target workspace
+                                      (+workspace-switch "${args.workspace_name}" t)
+                                      (setq result (concat result "=== WORKSPACE: " "${args.workspace_name}" " ===\\n"))
+                                      (let ((buffers (mapcar 'buffer-name (+workspace-buffer-list))))
+                                        (dolist (buf buffers)
+                                          (setq result (concat result buf "\\n"))))
+                                      ;; Switch back to original workspace
+                                      (unless (string= current-workspace "${args.workspace_name}")
+                                        (+workspace-switch current-workspace t)))
+                                  (setq result (format "Doom workspace '%s' not found. Available: %s\\n" 
+                                                      "${args.workspace_name}" 
+                                                      (mapconcat 'identity workspace-names ", ")))))
+                              (error (setq result (format "Error accessing Doom workspace: %s\\n" (error-message-string err))))))
+                           ;; Fallback to Eyebrowse
+                           ((boundp 'eyebrowse-current-window-config)
+                            (let* ((workspace-configs (eyebrowse--get 'window-configs))
+                                   (target-config (cl-find-if (lambda (config) 
+                                                                (string= (eyebrowse-format-slot config) "${args.workspace_name}")) 
+                                                              workspace-configs)))
+                              (if target-config
+                                  (let ((slot (car target-config))
+                                        (window-config (cdr target-config)))
+                                    (setq result (concat result "=== WORKSPACE: " "${args.workspace_name}" " ===\\n"))
+                                    (eyebrowse-switch-to-window-config slot)
+                                    (let ((buffers (mapcar 'buffer-name (buffer-list))))
+                                      (dolist (buf buffers)
+                                        (setq result (concat result buf "\\n"))))
+                                    (setq result (concat result "\\n")))
+                                (setq result "Workspace not found"))))
+                           ;; No workspace system available
+                           (t (setq result "No supported workspace system found - showing current buffer list\\n")
+                              (let ((buffers (mapcar 'buffer-name (buffer-list))))
+                                (dolist (buf buffers)
+                                  (setq result (concat result buf "\\n"))))))
+                          (write-region result nil "${filename}")
+                          (format "Workspace buffers written to %s" "${filename}"))`;
+            } else {
+                elisp = `(let ((result "=== ALL WORKSPACE BUFFERS ===\\n"))
+                          (cond
+                           ;; Check for Doom workspaces first
+                           ((and (fboundp '+workspace-buffer-list) (fboundp '+workspace-list-names))
+                            (condition-case err
+                              (let* ((workspace-names (+workspace-list-names))
+                                     (current-workspace (+workspace-current-name)))
+                                (dolist (workspace-name workspace-names)
+                                  (setq result (concat result "\\n=== WORKSPACE: " workspace-name " ===\\n"))
+                                  ;; Switch to workspace and get its buffers
+                                  (+workspace-switch workspace-name t)
+                                  (let ((buffers (mapcar 'buffer-name (+workspace-buffer-list))))
+                                    (dolist (buf buffers)
+                                      (setq result (concat result buf "\\n")))))
+                                ;; Switch back to original workspace
+                                (+workspace-switch current-workspace t))
+                              (error (setq result (format "Error accessing Doom workspaces: %s\\n" (error-message-string err))))))
+                           ;; Fallback to Eyebrowse
+                           ((boundp 'eyebrowse-current-window-config)
+                            (let ((workspace-configs (eyebrowse--get 'window-configs))
+                                  (current-slot (eyebrowse--get 'current-slot)))
+                              (dolist (config workspace-configs)
+                                (let ((slot (car config))
+                                      (window-config (cdr config)))
+                                  (setq result (concat result "\\n=== WORKSPACE " (number-to-string slot) " ===\\n"))
+                                  (eyebrowse-switch-to-window-config slot)
+                                  (let ((buffers (mapcar 'buffer-name (buffer-list))))
+                                    (dolist (buf buffers)
+                                      (setq result (concat result buf "\\n"))))))
+                              (eyebrowse-switch-to-window-config current-slot)))
+                           ;; No workspace system available
+                           (t (setq result (concat result "No supported workspace system found - showing current buffer list\\n"))
+                              (let ((buffers (mapcar 'buffer-name (buffer-list))))
+                                (dolist (buf buffers)
+                                  (setq result (concat result buf "\\n"))))))
+                          (write-region result nil "${filename}")
+                          (format "All workspace buffers written to %s" "${filename}"))`;
+            }
+            
+            execFile(
+                "emacsclient",
+                ["-e", elisp],
+                { encoding: "utf8", shell: false },
+                (error, stdout, stderr) => {
+                    if (error) {
+                        reject(error);
+                    } else {
+                        resolve(stdout.trim().replace(/^"(.*)"$/, '$1'));
+                    }
+                },
+            );
+        });
+    },
+});
+
+mcp.addTool({
+    name: "rename_workspace",
+    description: "Rename a workspace by its slot number or current name.",
+    parameters: z.object({
+        workspace_identifier: z.string().describe("Current workspace name or slot number to rename"),
+        new_name: z.string().describe("New name for the workspace"),
+    }),
+    execute: async (args) => {
+        return new Promise((resolve, reject) => {
+            const elisp = `(cond 
+                              ;; Check for Doom workspaces first
+                              ((and (fboundp '+workspace/rename) (fboundp '+workspace-get))
+                               (condition-case err
+                                 (let* ((current-workspace (+workspace-current))
+                                        (workspace-names (+workspace-list-names))
+                                        (target-workspace (or 
+                                                          ;; Try to find by name first
+                                                          (cl-find "${args.workspace_identifier}" workspace-names :test 'string=)
+                                                          ;; Try to find by number
+                                                          (when (string-match-p "^[0-9]+$" "${args.workspace_identifier}")
+                                                            (let ((index (string-to-number "${args.workspace_identifier}")))
+                                                              (when (and (>= index 0) (< index (length workspace-names)))
+                                                                (nth index workspace-names)))))))
+                                   (if target-workspace
+                                       (progn
+                                         ;; Switch to workspace temporarily to rename it, then switch back
+                                         (let ((current-workspace (+workspace-current-name))
+                                               (old-name nil))
+                                           (condition-case rename-err
+                                             (progn
+                                               ;; Switch to target workspace
+                                               (+workspace-switch target-workspace t)
+                                               ;; Rename it (this operates on current workspace)
+                                               (setq old-name (+workspace-rename (+workspace-current-name) "${args.new_name}"))
+                                               ;; Switch back to original workspace
+                                               (unless (string= current-workspace target-workspace)
+                                                 (+workspace-switch current-workspace t))
+                                               (if old-name
+                                                   (format "Successfully renamed Doom workspace '%s' to '%s'" old-name "${args.new_name}")
+                                                 (format "Failed to rename Doom workspace '%s'" "${args.workspace_identifier}")))
+                                             (error 
+                                               ;; Try to switch back on error
+                                               (ignore-errors (+workspace-switch current-workspace t))
+                                               (format "Error during rename: %s" (error-message-string rename-err))))))
+                                     (format "Doom workspace '%s' not found. Available: %s" "${args.workspace_identifier}" (mapconcat 'identity workspace-names ", "))))
+                                 (error (format "Error renaming Doom workspace: %s" (error-message-string err)))))
+                              ;; Fallback to Eyebrowse
+                              ((boundp 'eyebrowse-current-window-config)
+                               (let* ((workspace-configs (eyebrowse--get 'window-configs))
+                                      (target-config (or 
+                                                      (cl-find-if (lambda (config) 
+                                                                   (string= (eyebrowse-format-slot config) "${args.workspace_identifier}")) 
+                                                                 workspace-configs)
+                                                      (cl-find-if (lambda (config) 
+                                                                   (string= (number-to-string (car config)) "${args.workspace_identifier}")) 
+                                                                 workspace-configs))))
+                                 (if target-config
+                                     (let ((slot (car target-config)))
+                                       (eyebrowse-rename-window-config slot "${args.new_name}")
+                                       (format "Successfully renamed Eyebrowse workspace %s to '%s'" "${args.workspace_identifier}" "${args.new_name}"))
+                                   (format "Eyebrowse workspace '%s' not found" "${args.workspace_identifier}"))))
+                              (t "No supported workspace system found (neither Doom workspaces nor Eyebrowse)"))`;
+            
+            execFile(
+                "emacsclient",
+                ["-e", elisp],
+                { encoding: "utf8", shell: false },
+                (error, stdout, stderr) => {
+                    if (error) {
+                        reject(error);
+                    } else {
+                        resolve(stdout.trim().replace(/^"(.*)"$/, '$1'));
+                    }
+                },
+            );
+        });
+    },
+});
+
+mcp.addTool({
+    name: "create_workspace",
+    description: "Create a new workspace with a given name.",
+    parameters: z.object({
+        workspace_name: z.string().describe("Name for the new workspace"),
+    }),
+    execute: async (args) => {
+        return new Promise((resolve, reject) => {
+            const elisp = `(cond 
+                              ;; Check for Doom workspaces first
+                              ((fboundp '+workspace-new)
+                               (condition-case err
+                                 (progn
+                                   (+workspace-new "${args.workspace_name}")
+                                   (format "Successfully created Doom workspace '%s'" "${args.workspace_name}"))
+                                 (error (format "Error creating Doom workspace: %s" (error-message-string err)))))
+                              ;; Fallback to Eyebrowse
+                              ((fboundp 'eyebrowse-create-window-config)
+                               (condition-case err
+                                 (progn
+                                   (eyebrowse-create-window-config)
+                                   (eyebrowse-rename-window-config (eyebrowse--get 'current-slot) "${args.workspace_name}")
+                                   (format "Successfully created Eyebrowse workspace '%s'" "${args.workspace_name}"))
+                                 (error (format "Error creating Eyebrowse workspace: %s" (error-message-string err)))))
+                              (t "No supported workspace system found"))`;
+            
+            execFile(
+                "emacsclient",
+                ["-e", elisp],
+                { encoding: "utf8", shell: false },
+                (error, stdout, stderr) => {
+                    if (error) {
+                        reject(error);
+                    } else {
+                        resolve(stdout.trim().replace(/^"(.*)"$/, '$1'));
+                    }
+                },
+            );
+        });
+    },
+});
+
+mcp.addTool({
+    name: "delete_workspace",
+    description: "Delete a workspace by name or identifier.",
+    parameters: z.object({
+        workspace_identifier: z.string().describe("Workspace name or identifier to delete"),
+    }),
+    execute: async (args) => {
+        return new Promise((resolve, reject) => {
+            const elisp = `(cond 
+                              ;; Check for Doom workspaces first
+                              ((and (fboundp '+workspace-kill) (fboundp '+workspace-list-names))
+                               (condition-case err
+                                 (let* ((workspace-names (+workspace-list-names))
+                                        (target-workspace (or 
+                                                          (cl-find "${args.workspace_identifier}" workspace-names :test 'string=)
+                                                          (when (string-match-p "^[0-9]+$" "${args.workspace_identifier}")
+                                                            (let ((index (string-to-number "${args.workspace_identifier}")))
+                                                              (when (and (>= index 0) (< index (length workspace-names)))
+                                                                (nth index workspace-names)))))))
+                                   (if target-workspace
+                                       (progn
+                                         (+workspace-kill target-workspace)
+                                         (format "Successfully deleted Doom workspace '%s'" target-workspace))
+                                     (format "Doom workspace '%s' not found. Available: %s" "${args.workspace_identifier}" (mapconcat 'identity workspace-names ", "))))
+                                 (error (format "Error deleting Doom workspace: %s" (error-message-string err)))))
+                              ;; Fallback to Eyebrowse
+                              ((boundp 'eyebrowse-current-window-config)
+                               (condition-case err
+                                 (let* ((workspace-configs (eyebrowse--get 'window-configs))
+                                        (target-config (or 
+                                                        (cl-find-if (lambda (config) 
+                                                                     (string= (eyebrowse-format-slot config) "${args.workspace_identifier}")) 
+                                                                   workspace-configs)
+                                                        (cl-find-if (lambda (config) 
+                                                                     (string= (number-to-string (car config)) "${args.workspace_identifier}")) 
+                                                                   workspace-configs))))
+                                   (if target-config
+                                       (let ((slot (car target-config)))
+                                         (eyebrowse-close-window-config slot)
+                                         (format "Successfully deleted Eyebrowse workspace %s" "${args.workspace_identifier}"))
+                                     (format "Eyebrowse workspace '%s' not found" "${args.workspace_identifier}")))
+                                 (error (format "Error deleting Eyebrowse workspace: %s" (error-message-string err)))))
+                              (t "No supported workspace system found"))`;
+            
+            execFile(
+                "emacsclient",
+                ["-e", elisp],
+                { encoding: "utf8", shell: false },
+                (error, stdout, stderr) => {
+                    if (error) {
+                        reject(error);
+                    } else {
+                        resolve(stdout.trim().replace(/^"(.*)"$/, '$1'));
+                    }
+                },
+            );
+        });
+    },
+});
+
+mcp.addTool({
     name: "view_buffer",
     description: "Get the contents of one or more Emacs buffers and write each to /tmp/ClaudeWorkingFolder/<buffer_name>.txt. Returns a list of file paths for all buffers.",
     parameters: z.object({
@@ -609,6 +1189,79 @@ mcp.addTool({
             } catch (writeError) {
                 reject(new Error(`Failed to prepare multiple buffer processing: ${writeError}`));
             }
+        });
+    },
+});
+
+mcp.addTool({
+    name: "move_buffer_to_workspace",
+    description: "Move a buffer to a specific workspace. Works with both Doom workspaces and Eyebrowse.",
+    parameters: z.object({
+        buffer_name: z.string().describe("Name of the buffer to move"),
+        workspace_name: z.string().describe("Name of the target workspace"),
+    }),
+    execute: async (args) => {
+        return new Promise((resolve, reject) => {
+            const elisp = `
+                (condition-case err
+                    (cond
+                     ;; Check for Doom workspaces first
+                     ((and (fboundp 'persp-add-buffer) (fboundp '+workspace-get) (fboundp '+workspace-switch))
+                      (let* ((buffer (get-buffer "${args.buffer_name}"))
+                             (workspace-names (+workspace-list-names))
+                             (target-workspace (cl-find "${args.workspace_name}" workspace-names :test 'string=))
+                             (current-workspace (+workspace-current-name)))
+                        (if (and buffer target-workspace)
+                            (progn
+                              ;; Switch to target workspace temporarily
+                              (+workspace-switch target-workspace t)
+                              ;; Add buffer to workspace
+                              (persp-add-buffer buffer (+workspace-get target-workspace))
+                              ;; Switch back to original workspace
+                              (unless (string= current-workspace target-workspace)
+                                (+workspace-switch current-workspace t))
+                              (format "Successfully moved buffer '%s' to workspace '%s'" "${args.buffer_name}" "${args.workspace_name}"))
+                          (cond
+                           ((not buffer) (format "Buffer '%s' not found" "${args.buffer_name}"))
+                           ((not target-workspace) (format "Workspace '%s' not found. Available: %s" "${args.workspace_name}" (mapconcat 'identity workspace-names ", ")))
+                           (t "Unknown error")))))
+                     ;; Check for Eyebrowse workspaces
+                     ((fboundp 'eyebrowse-switch-to-window-config)
+                      (let* ((buffer (get-buffer "${args.buffer_name}"))
+                             (workspace-configs (eyebrowse--get 'window-configs))
+                             (target-config (cl-find-if (lambda (config)
+                                                          (string= (eyebrowse-format-slot config) "${args.workspace_name}")) 
+                                                        workspace-configs))
+                             (current-slot (eyebrowse--get 'current-slot)))
+                        (if (and buffer target-config)
+                            (progn
+                              ;; Switch to target workspace
+                              (eyebrowse-switch-to-window-config (car target-config))
+                              ;; Display buffer in workspace
+                              (switch-to-buffer buffer)
+                              ;; Switch back to original workspace
+                              (unless (= current-slot (car target-config))
+                                (eyebrowse-switch-to-window-config current-slot))
+                              (format "Successfully moved buffer '%s' to workspace '%s'" "${args.buffer_name}" "${args.workspace_name}"))
+                          (cond
+                           ((not buffer) (format "Buffer '%s' not found" "${args.buffer_name}"))
+                           ((not target-config) (format "Workspace '%s' not found" "${args.workspace_name}"))
+                           (t "Unknown error")))))
+                     (t "No supported workspace system found"))
+                  (error (format "Error moving buffer: %s" (error-message-string err))))`;
+            
+            execFile(
+                "emacsclient",
+                ["-e", elisp],
+                { encoding: "utf8", shell: false },
+                (error, stdout, stderr) => {
+                    if (error) {
+                        reject(error);
+                    } else {
+                        resolve(stdout.trim().replace(/^"(.*)"$/, '$1'));
+                    }
+                },
+            );
         });
     },
 });
