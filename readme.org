@@ -33,19 +33,42 @@ A comprehensive MCP server for Emacs introspection through the emacsclient daemo
 - `org_get_all_todos` - Get all TODO items from org files, including unscheduled ones (outputs to file)
 - `org_schedule_todo` - Schedule a TODO item by adding SCHEDULED property to headings
 - `org_agenda_todo` - Change the state of agenda items (TODO → DONE, etc.) by line number or heading text
+- `org_archive_todo` - Archive completed TODO items by moving them to archive files
+- `org_agenda_goto` - Navigate to source location of agenda items with context
 - `org_capture` - Add new items via org-capture with immediate completion (default) or buffer editing
-* *Warning*
 
-All tools evaluate elisp via the emacsclient with controlled security measures. The server uses various elisp operations including symbol introspection, buffer operations, apropos searches, and advanced buffer/keymap analysis.
+* *Security & Safety*
 
-The security measures to prevent injections include:
-- Using single quotes (') to prevent evaluation of forms, unlike backtick which would be vulnerable to comma escaping
-- Using execFile with shell=false to prevent shell injection on the TypeScript side
-- Symbol validation with regexp: `/^[a-zA-Z0-9\-_/+:]+$/` for symbols (expanded to support workspace naming) and additional validation for buffer names and file paths
-- Buffer name validation to prevent path traversal attacks
-- File path restrictions: `open_file` and `check_parens` are restricted to the current working directory and `/tmp/ClaudeWorkingFolder` only, with path traversal attack prevention
+I've made *some* attempt to make this more secure against code injection, but none of this should be taken as any kind of guarantee.
 
-File access is now limited to safe directories, reducing exfiltration risks compared to unbounded file system access. However, note that the ability to read open buffers in emacs may provide Claude with more information than you are comfortable with, and if you give Claude unlimited access to the web then you may be in danger of exfiltration attacks (( https://simonwillison.net/tags/lethal-trifecta/).
+** Comprehensive Input Sanitization
+All MCP tools are wrapped with a security decorator that provides multi-layer protection:
+
+*** Input Validation
+- **Pattern Detection**: Automatically rejects inputs containing dangerous patterns like shell commands, elisp injection attempts, and malicious functions
+- **Type Validation**: Enforces proper data types and non-empty strings where required
+- **Symbol Validation**: Strict regex validation for Emacs symbols: `/^[a-zA-Z][a-zA-Z0-9\-_:+*/?<>=!]*$/`
+
+*** File Path Security  
+- **Directory Restrictions**: File operations limited to current working directory and `/tmp/ClaudeWorkingFolder` only
+- **Path Traversal Prevention**: Blocks `../` and `..\\` sequences in all file paths
+- **Injection Protection**: Rejects paths containing dangerous characters: quotes, semicolons, parentheses, shell metacharacters
+- **Platform Safety**: Prevents Windows-style absolute paths on Unix systems (which become relative and bypass restrictions)
+
+*** Elisp Injection Prevention
+- **Safe Quoting**: Uses single quotes (') to prevent evaluation, unlike backtick which would be vulnerable to comma escaping
+- **String Escaping**: Proper escaping of backslashes, quotes, newlines, and control characters in elisp strings
+- **Process Isolation**: Uses `execFile` with `shell=false` to prevent shell injection attacks
+- **Parameter Sanitization**: All user inputs are validated and escaped before being inserted into elisp code
+
+*** Attack Mitigation
+The security system prevents common attack vectors:
+- **Code Injection**: Elisp, shell command, and script injection attempts
+- **Path Traversal**: Directory escape attempts and unauthorized file access  
+- **Data Exfiltration**: Unauthorized file system access outside allowed directories
+
+** Risk Assessment
+File access is limited to safe directories, significantly reducing exfiltration risks compared to unbounded file system access. However, note that the ability to read open buffers in Emacs may provide Claude with more information than you are comfortable with, and if you give Claude unlimited access to the web then you may be in danger of exfiltration attacks ([[https://simonwillison.net/tags/lethal-trifecta/][Lethal Trifecta]]).
 
 * Installation
 ** Claude Code
@@ -185,12 +208,13 @@ LSP tools (`eglot_help_at_point`, `eglot_find_definition`, `eglot_find_reference
 
 * Implementation Details
 
-** Security Measures
-All tools evaluate elisp via emacsclient with controlled security:
-- Uses single quotes to prevent evaluation (no backtick vulnerability)
-- Uses `execFile` with `shell=false` to prevent shell injection
-- Symbol validation with regexp: `/^[a-zA-Z0-9\-_/+:]+$/` for symbols (expanded to support workspace naming)
-- Buffer name validation to prevent path traversal
+** Security Implementation
+All tools use comprehensive security measures including:
+- **Security Decorator Pattern**: Every MCP tool wrapped with input validation and sanitization
+- **Multi-Layer Validation**: Pattern detection, type checking, length limits, and character restrictions
+- **Safe Elisp Generation**: Proper escaping and quoting to prevent code injection
+- **File System Restrictions**: Strict directory limitations with path traversal protection
+- **Process Isolation**: Shell-free execution to prevent command injection
 
 ** File Output
 Large data (buffers, keymaps, agenda) is written to `/tmp/ClaudeWorkingFolder/` to handle size limitations and enable further analysis with other tools.
@@ -210,10 +234,10 @@ The server implements the following elisp operations:
 
 ** Testing
 All tools have been tested and verified working with:
-- Emacs 30.1 
-- Basic connection and variable retrieval
-- Buffer operations and error handling
-- Symbol search and documentation
-- Meta-tools for comprehensive analysis
-- Org agenda integration
-- Syntax checking capabilities
+- **Emacs 30.1** - Full compatibility testing
+- **Security Validation** - Comprehensive test suite with 42 passing tests covering injection prevention, path traversal protection, and input sanitization
+- **Core Functionality** - Basic connection, variable retrieval, buffer operations, and error handling
+- **Advanced Features** - Symbol search, documentation, meta-tools analysis, org agenda integration, and syntax checking
+- **Edge Cases** - Unicode handling, long paths, special characters, and malformed inputs
+
+For detailed testing instructions and security validation, see `TESTING.md`.

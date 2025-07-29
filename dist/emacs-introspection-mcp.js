@@ -15,6 +15,7 @@ const zod_1 = require("zod");
 const child_process_1 = require("child_process");
 const fs_1 = require("fs");
 const path_1 = require("path");
+const security_decorator_1 = require("./security-decorator");
 const mcp = new fastmcp_1.FastMCP({
     name: "emacs-introspection",
     version: "1.0.0",
@@ -50,7 +51,7 @@ const isValidEmacsSymbol = (str) => {
     // Specifically: letters, numbers, hyphens, underscores, forward slashes, plus signs, colons
     return /^[a-zA-Z0-9\-_/+:]+$/.test(str) && str.length > 0 && str.length < 100;
 };
-mcp.addTool({
+mcp.addTool((0, security_decorator_1.secureMCPTool)({
     name: "get_variable_value",
     description: "Get the current value of one or more Emacs variables",
     parameters: zod_1.z.object({
@@ -60,7 +61,7 @@ mcp.addTool({
     }),
     execute: (args) => __awaiter(void 0, void 0, void 0, function* () {
         return new Promise((resolve, reject) => {
-            const variableQueries = args.variable_names.map(varName => `(format "%s: %s" "${varName}" (condition-case err (symbol-value '${varName}) (error (format "Error: %s" (error-message-string err)))))`).join(" \"\\n\" ");
+            const variableQueries = args.variable_names.map((varName) => `(format "%s: %s" "${varName}" (condition-case err (symbol-value '${varName}) (error (format "Error: %s" (error-message-string err)))))`).join(" \"\\n\" ");
             const elisp = `(concat ${variableQueries})`;
             (0, child_process_1.execFile)("emacsclient", ["-e", elisp], { encoding: "utf8", shell: false }, (error, stdout, stderr) => {
                 if (error) {
@@ -70,8 +71,8 @@ mcp.addTool({
             });
         });
     }),
-});
-mcp.addTool({
+}));
+mcp.addTool((0, security_decorator_1.secureMCPTool)({
     name: "get_agenda",
     description: "Get the org-agenda view and write it to /tmp/ClaudeWorkingFolder/agenda_<agenda_type>.txt. Returns the file path so Claude can use other tools like Read, Grep, etc. to analyze the agenda content.",
     parameters: zod_1.z.object({
@@ -94,10 +95,10 @@ mcp.addTool({
             });
         });
     }),
-});
+}));
 const isValidBufferName = (str) => str.length > 0 && str.length < 256;
 const isValidSymbolName = (str) => /^[a-zA-Z0-9-_:]+$/.test(str);
-mcp.addTool({
+mcp.addTool((0, security_decorator_1.secureMCPTool)({
     name: "open_file",
     description: "Open one or more files in Emacs in the background (without switching to them) and return the buffer names. Files must be within the current working directory or /tmp/ClaudeWorkingFolder. Relative paths are resolved from the current working directory.",
     parameters: zod_1.z.object({
@@ -118,8 +119,8 @@ mcp.addTool({
             });
         });
     }),
-});
-mcp.addTool({
+}));
+mcp.addTool((0, security_decorator_1.secureMCPTool)({
     name: "emacs_search",
     description: "Search for Emacs symbols, commands, or variables matching a pattern using various apropos functions",
     parameters: zod_1.z.object({
@@ -177,8 +178,8 @@ mcp.addTool({
             });
         });
     }),
-});
-mcp.addTool({
+}));
+mcp.addTool((0, security_decorator_1.secureMCPTool)({
     name: "emacs_describe",
     description: "Get comprehensive documentation for one or more Emacs symbols. For functions, includes key bindings. Handles Lisp-2 namespace by allowing explicit type specification.",
     parameters: zod_1.z.object({
@@ -246,8 +247,8 @@ mcp.addTool({
             });
         });
     }),
-});
-mcp.addTool({
+}));
+mcp.addTool((0, security_decorator_1.secureMCPTool)({
     name: "emacs_buffer_info",
     description: "Get comprehensive buffer information including content, mode details, and key variables. Writes content to /tmp/ClaudeWorkingFolder/buffer_info_<buffer_name>.txt for each buffer.",
     parameters: zod_1.z.object({
@@ -329,8 +330,8 @@ mcp.addTool({
             }
         });
     }),
-});
-mcp.addTool({
+}));
+mcp.addTool((0, security_decorator_1.secureMCPTool)({
     name: "check_parens",
     description: "Run check-parens on one or more files by opening them fresh in Emacs to validate parentheses balance in Lisp code. Files must be within the current working directory or /tmp/ClaudeWorkingFolder. Relative paths are resolved from the current working directory.",
     parameters: zod_1.z.object({
@@ -363,8 +364,8 @@ mcp.addTool({
             });
         });
     }),
-});
-mcp.addTool({
+}));
+mcp.addTool((0, security_decorator_1.secureMCPTool)({
     name: "get_buffer_list",
     description: "Get a list of all live buffers in Emacs. Returns buffer names with their associated files (if any).",
     parameters: zod_1.z.object({
@@ -407,8 +408,8 @@ mcp.addTool({
             });
         });
     }),
-});
-mcp.addTool({
+}));
+mcp.addTool((0, security_decorator_1.secureMCPTool)({
     name: "emacs_keymap_analysis",
     description: "Analyze keymaps for one or more buffer contexts and write to /tmp/ClaudeWorkingFolder/keymap_analysis_<buffer_name>.txt. Shows major mode keymap, minor mode keymaps, and local bindings.",
     parameters: zod_1.z.object({
@@ -483,8 +484,8 @@ mcp.addTool({
             }
         });
     }),
-});
-mcp.addTool({
+}));
+mcp.addTool((0, security_decorator_1.secureMCPTool)({
     name: "org_agenda_todo",
     description: "Change the state of an agenda item (e.g., TODO -> DONE). Can target items by line number in agenda buffer or by heading text in org files.",
     parameters: zod_1.z.object({
@@ -544,8 +545,8 @@ mcp.addTool({
             });
         });
     }),
-});
-mcp.addTool({
+}));
+mcp.addTool((0, security_decorator_1.secureMCPTool)({
     name: "org_capture",
     description: "Add a new agenda item via org-capture mechanism. Uses existing capture templates or allows custom capture.",
     parameters: zod_1.z.object({
@@ -626,8 +627,8 @@ mcp.addTool({
             });
         });
     }),
-});
-mcp.addTool({
+}));
+mcp.addTool((0, security_decorator_1.secureMCPTool)({
     name: "org_get_all_todos",
     description: "Get all TODO items from org files, including unscheduled ones. Writes results to /tmp/ClaudeWorkingFolder/all_todos.txt.",
     parameters: zod_1.z.object({
@@ -676,8 +677,8 @@ mcp.addTool({
             });
         });
     }),
-});
-mcp.addTool({
+}));
+mcp.addTool((0, security_decorator_1.secureMCPTool)({
     name: "org_schedule_todo",
     description: "Schedule a TODO item by adding SCHEDULED property. Can target by heading text in org files.",
     parameters: zod_1.z.object({
@@ -727,8 +728,181 @@ mcp.addTool({
             });
         });
     }),
-});
-mcp.addTool({
+}));
+mcp.addTool((0, security_decorator_1.secureMCPTool)({
+    name: "org_archive_todo",
+    description: "Archive a TODO item by moving it to the archive file. Can target by heading text in org files.",
+    parameters: zod_1.z.object({
+        org_file: zod_1.z.string().describe("Path to the org file containing the heading"),
+        heading_text: zod_1.z.string().describe("Text of the heading to archive"),
+        archive_location: zod_1.z.string().optional().describe("Archive location (defaults to file_archive::* Archive)"),
+    }),
+    execute: (args) => __awaiter(void 0, void 0, void 0, function* () {
+        return new Promise((resolve, reject) => {
+            if (!isValidFilePath(args.org_file)) {
+                reject(new Error("Invalid or restricted file path"));
+                return;
+            }
+            let elisp;
+            if (args.archive_location) {
+                elisp = `(save-window-excursion
+                    (find-file "${args.org_file}")
+                    (goto-char (point-min))
+                    (if (search-forward "${args.heading_text}" nil t)
+                        (progn
+                          (org-back-to-heading t)
+                          (let ((org-archive-location "${args.archive_location}"))
+                            (org-archive-subtree))
+                          (save-buffer)
+                          (format "Successfully archived heading '%s' from %s to %s" "${args.heading_text}" "${args.org_file}" "${args.archive_location}"))
+                      (error "Heading '%s' not found in %s" "${args.heading_text}" "${args.org_file}")))`;
+            }
+            else {
+                elisp = `(save-window-excursion
+                    (find-file "${args.org_file}")
+                    (goto-char (point-min))
+                    (if (search-forward "${args.heading_text}" nil t)
+                        (progn
+                          (org-back-to-heading t)
+                          (org-archive-subtree)
+                          (save-buffer)
+                          (format "Successfully archived heading '%s' from %s" "${args.heading_text}" "${args.org_file}"))
+                      (error "Heading '%s' not found in %s" "${args.heading_text}" "${args.org_file}")))`;
+            }
+            (0, child_process_1.execFile)("emacsclient", ["-e", elisp], { encoding: "utf8", shell: false }, (error, stdout, stderr) => {
+                if (error) {
+                    reject(error);
+                }
+                else {
+                    resolve(stdout.trim().replace(/^"(.*)"$/, '$1'));
+                }
+            });
+        });
+    }),
+}));
+mcp.addTool((0, security_decorator_1.secureMCPTool)({
+    name: "org_agenda_goto",
+    description: "Go to the source location of an agenda item and return file path and content around that location. Takes an agenda line number or searches for agenda item text.",
+    parameters: zod_1.z.object({
+        target_type: zod_1.z.enum(["agenda_line", "agenda_text"]).describe("Whether to target by agenda line number or search for agenda item text"),
+        target: zod_1.z.string().describe("Either agenda line number (1-based) or agenda item text to search for"),
+        agenda_type: zod_1.z.string().optional().default("a").describe("Agenda type to work with (default 'a')"),
+        context_lines: zod_1.z.number().optional().default(5).describe("Number of lines before/after to show for context"),
+    }),
+    execute: (args) => __awaiter(void 0, void 0, void 0, function* () {
+        return new Promise((resolve, reject) => {
+            // Ensure /tmp/ClaudeWorkingFolder directory exists
+            (0, fs_1.mkdirSync)("/tmp/ClaudeWorkingFolder", { recursive: true });
+            const filename = (0, path_1.join)("/tmp/ClaudeWorkingFolder", `agenda_goto_result.txt`);
+            let elisp;
+            if (args.target_type === "agenda_line") {
+                elisp = `(save-window-excursion
+                    (let ((org-agenda-window-setup 'current-window)
+                          (result ""))
+                      (org-agenda nil "${args.agenda_type}")
+                      (with-current-buffer "*Org Agenda*"
+                        (goto-char (point-min))
+                        (forward-line (1- ${parseInt(args.target)}))
+                        (condition-case err
+                            (progn
+                              (org-agenda-goto)
+                              ;; Now we're in the source org file
+                              (let* ((file-name (buffer-file-name))
+                                     (line-num (line-number-at-pos))
+                                     (heading (org-get-heading t t t t))
+                                     (start-line (max 1 (- line-num ${args.context_lines})))
+                                     (end-line (+ line-num ${args.context_lines}))
+                                     (content ""))
+                                (setq result (concat result (format "=== AGENDA ITEM SOURCE ===\\n")))
+                                (setq result (concat result (format "File: %s\\n" file-name)))
+                                (setq result (concat result (format "Line: %d\\n" line-num)))
+                                (setq result (concat result (format "Heading: %s\\n\\n" heading)))
+                                (setq result (concat result (format "=== CONTEXT (lines %d-%d) ===\\n" start-line end-line)))
+                                
+                                ;; Get content with line numbers
+                                (save-excursion
+                                  (goto-char (point-min))
+                                  (forward-line (1- start-line))
+                                  (let ((current-line start-line))
+                                    (while (and (<= current-line end-line) (not (eobp)))
+                                      (setq content (concat content
+                                        (format "%4d%s %s\\n" 
+                                          current-line
+                                          (if (= current-line line-num) "→" " ")
+                                          (buffer-substring-no-properties (line-beginning-position) (line-end-position)))))
+                                      (forward-line 1)
+                                      (setq current-line (1+ current-line)))))
+                                (setq result (concat result content))
+                                (write-region result nil "${filename}")
+                                result))
+                          (error 
+                            (setq result (format "Error going to agenda item at line %s: %s\\n" "${args.target}" (error-message-string err)))
+                            (write-region result nil "${filename}")
+                            result)))))`;
+            }
+            else {
+                // target_type === "agenda_text" - search for text in agenda
+                elisp = `(save-window-excursion
+                    (let ((org-agenda-window-setup 'current-window)
+                          (result ""))
+                      (org-agenda nil "${args.agenda_type}")
+                      (with-current-buffer "*Org Agenda*"
+                        (goto-char (point-min))
+                        (if (search-forward "${args.target}" nil t)
+                            (condition-case err
+                                (progn
+                                  (beginning-of-line)
+                                  (org-agenda-goto)
+                                  ;; Now we're in the source org file
+                                  (let* ((file-name (buffer-file-name))
+                                         (line-num (line-number-at-pos))
+                                         (heading (org-get-heading t t t t))
+                                         (start-line (max 1 (- line-num ${args.context_lines})))
+                                         (end-line (+ line-num ${args.context_lines}))
+                                         (content ""))
+                                    (setq result (concat result (format "=== AGENDA ITEM SOURCE ===\\n")))
+                                    (setq result (concat result (format "File: %s\\n" file-name)))
+                                    (setq result (concat result (format "Line: %d\\n" line-num)))
+                                    (setq result (concat result (format "Heading: %s\\n\\n" heading)))
+                                    (setq result (concat result (format "=== CONTEXT (lines %d-%d) ===\\n" start-line end-line)))
+                                    
+                                    ;; Get content with line numbers
+                                    (save-excursion
+                                      (goto-char (point-min))
+                                      (forward-line (1- start-line))
+                                      (let ((current-line start-line))
+                                        (while (and (<= current-line end-line) (not (eobp)))
+                                          (setq content (concat content
+                                            (format "%4d%s %s\\n" 
+                                              current-line
+                                              (if (= current-line line-num) "→" " ")
+                                              (buffer-substring-no-properties (line-beginning-position) (line-end-position)))))
+                                          (forward-line 1)
+                                          (setq current-line (1+ current-line)))))
+                                    (setq result (concat result content))
+                                    (write-region result nil "${filename}")
+                                    result))
+                              (error 
+                                (setq result (format "Error going to agenda item containing '%s': %s\\n" "${args.target}" (error-message-string err)))
+                                (write-region result nil "${filename}")
+                                result))
+                          (progn
+                            (setq result (format "Agenda item containing '%s' not found\\n" "${args.target}"))
+                            (write-region result nil "${filename}")
+                            result)))))`;
+            }
+            (0, child_process_1.execFile)("emacsclient", ["-e", elisp], { encoding: "utf8", shell: false }, (error, stdout, stderr) => {
+                if (error) {
+                    reject(error);
+                }
+                else {
+                    resolve(`Agenda goto result written to ${filename}:\n${stdout.trim().replace(/^"(.*)"$/, '$1')}`);
+                }
+            });
+        });
+    }),
+}));
+mcp.addTool((0, security_decorator_1.secureMCPTool)({
     name: "get_workspace_buffers",
     description: "Get the list of buffers in each workspace. Writes results to /tmp/ClaudeWorkingFolder/workspace_buffers.txt.",
     parameters: zod_1.z.object({
@@ -836,8 +1010,8 @@ mcp.addTool({
             });
         });
     }),
-});
-mcp.addTool({
+}));
+mcp.addTool((0, security_decorator_1.secureMCPTool)({
     name: "rename_workspace",
     description: "Rename a workspace by its slot number or current name.",
     parameters: zod_1.z.object({
@@ -909,8 +1083,8 @@ mcp.addTool({
             });
         });
     }),
-});
-mcp.addTool({
+}));
+mcp.addTool((0, security_decorator_1.secureMCPTool)({
     name: "create_workspace",
     description: "Create a new workspace with a given name.",
     parameters: zod_1.z.object({
@@ -945,8 +1119,8 @@ mcp.addTool({
             });
         });
     }),
-});
-mcp.addTool({
+}));
+mcp.addTool((0, security_decorator_1.secureMCPTool)({
     name: "delete_workspace",
     description: "Delete a workspace by name or identifier.",
     parameters: zod_1.z.object({
@@ -999,8 +1173,8 @@ mcp.addTool({
             });
         });
     }),
-});
-mcp.addTool({
+}));
+mcp.addTool((0, security_decorator_1.secureMCPTool)({
     name: "view_buffer",
     description: "Get the contents of one or more Emacs buffers and write each to /tmp/ClaudeWorkingFolder/<buffer_name>.txt. Returns a list of file paths for all buffers.",
     parameters: zod_1.z.object({
@@ -1051,8 +1225,8 @@ mcp.addTool({
             }
         });
     }),
-});
-mcp.addTool({
+}));
+mcp.addTool((0, security_decorator_1.secureMCPTool)({
     name: "move_buffer_to_workspace",
     description: "Move a buffer to a specific workspace. Works with both Doom workspaces and Eyebrowse.",
     parameters: zod_1.z.object({
@@ -1118,7 +1292,7 @@ mcp.addTool({
             });
         });
     }),
-});
+}));
 mcp.start({
     transportType: "stdio",
 });

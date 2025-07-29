@@ -3,8 +3,9 @@
 import { FastMCP } from "fastmcp";
 import { z } from "zod";
 import { execFile } from "child_process";
-import { writeFileSync, mkdirSync } from "fs";
+import { mkdirSync } from "fs";
 import { join, resolve, relative } from "path";
+import { secureMCPTool } from "./security-decorator";
 
 const mcp = new FastMCP({
     name: "emacs-introspection",
@@ -28,11 +29,23 @@ const isValidFilePath = (filePath: string): boolean => {
         return false;
     }
     
+    // Prevent injection patterns in file paths
+    if (filePath.includes('"') || filePath.includes("'") || filePath.includes(';') || 
+        filePath.includes('(') || filePath.includes(')') || filePath.includes('$') ||
+        filePath.includes('\n') || filePath.includes('\r')) {
+        return false;
+    }
+    
+    // Reject Windows-style absolute paths on Unix systems (they become relative)
+    if (filePath.match(/^[A-Za-z]:\\/)) {
+        return false;
+    }
+    
     try {
         const resolvedPath = resolve(filePath);
         return ALLOWED_DIRS.some(allowedDir => {
-            const relativePath = relative(allowedDir, resolvedPath);
-            return !relativePath || (!relativePath.startsWith("..") && !relativePath.startsWith("/"));
+            // Check if resolved path starts with the allowed directory
+            return resolvedPath.startsWith(allowedDir + "/") || resolvedPath === allowedDir;
         });
     } catch {
         return false;
@@ -48,7 +61,7 @@ const isValidEmacsSymbol = (str: string) => {
 
 
 
-mcp.addTool({
+mcp.addTool(secureMCPTool({
     name: "get_variable_value",
     description: "Get the current value of one or more Emacs variables",
     parameters: z.object({
@@ -56,9 +69,9 @@ mcp.addTool({
             .array(z.string().refine(isValidEmacsSymbol, "Invalid Emacs symbol name"))
             .min(1, "Must provide at least one variable name"),
     }),
-    execute: async (args) => {
+    execute: async (args: any) => {
         return new Promise((resolve, reject) => {
-            const variableQueries = args.variable_names.map(varName => 
+            const variableQueries = args.variable_names.map((varName: string) => 
                 `(format "%s: %s" "${varName}" (condition-case err (symbol-value '${varName}) (error (format "Error: %s" (error-message-string err)))))`
             ).join(" \"\\n\" ");
             
@@ -77,16 +90,16 @@ mcp.addTool({
             );
         });
     },
-});
+}));
 
 
-mcp.addTool({
+mcp.addTool(secureMCPTool({
     name: "get_agenda",
     description: "Get the org-agenda view and write it to /tmp/ClaudeWorkingFolder/agenda_<agenda_type>.txt. Returns the file path so Claude can use other tools like Read, Grep, etc. to analyze the agenda content.",
     parameters: z.object({
         agenda_type: z.string().optional().default("a"),
     }),
-    execute: async (args) => {
+    execute: async (args: any) => {
         return new Promise((resolve, reject) => {
             // Ensure /tmp/ClaudeWorkingFolder directory exists
             mkdirSync("/tmp/ClaudeWorkingFolder", { recursive: true });
@@ -109,18 +122,18 @@ mcp.addTool({
             );
         });
     },
-});
+}));
 
 const isValidBufferName = (str: string) => str.length > 0 && str.length < 256;
 const isValidSymbolName = (str: string) => /^[a-zA-Z0-9-_:]+$/.test(str);
 
-mcp.addTool({
+mcp.addTool(secureMCPTool({
     name: "open_file",
     description: "Open one or more files in Emacs in the background (without switching to them) and return the buffer names. Files must be within the current working directory or /tmp/ClaudeWorkingFolder. Relative paths are resolved from the current working directory.",
     parameters: z.object({
         file_paths: z.array(z.string().refine(isValidFilePath, "Invalid or restricted file path")).min(1, "Must provide at least one file path"),
     }),
-    execute: async (args) => {
+    execute: async (args: any) => {
         return new Promise((resolve, reject) => {
             const fileOperations = args.file_paths.map(filePath => 
                 `(let ((buffer (find-file-noselect "${filePath}")))
@@ -143,10 +156,10 @@ mcp.addTool({
             );
         });
     },
-});
+}));
 
 
-mcp.addTool({
+mcp.addTool(secureMCPTool({
     name: "emacs_search",
     description: "Search for Emacs symbols, commands, or variables matching a pattern using various apropos functions",
     parameters: z.object({
@@ -154,7 +167,7 @@ mcp.addTool({
         type: z.enum(["all", "commands", "variables", "functions"]).default("all"),
         predicate: z.string().optional().default(""),
     }),
-    execute: async (args) => {
+    execute: async (args: any) => {
         return new Promise((resolve, reject) => {
             let elisp: string;
             
@@ -208,21 +221,21 @@ mcp.addTool({
             );
         });
     },
-});
+}));
 
 
 
 
-mcp.addTool({
+mcp.addTool(secureMCPTool({
     name: "emacs_describe",
     description: "Get comprehensive documentation for one or more Emacs symbols. For functions, includes key bindings. Handles Lisp-2 namespace by allowing explicit type specification.",
     parameters: z.object({
         symbol_names: z.array(z.string().refine(isValidEmacsSymbol, "Invalid Emacs symbol name")).min(1, "Must provide at least one symbol name"),
         type: z.enum(["function", "variable", "symbol"]).default("symbol"),
     }),
-    execute: async (args) => {
+    execute: async (args: any) => {
         return new Promise((resolve, reject) => {
-            const symbolDescriptions = args.symbol_names.map((symbolName, index) => {
+            const symbolDescriptions = args.symbol_names.map((symbolName: string, index: number) => {
                 if (args.type === "function") {
                     return `(let ((sym '${symbolName}))
                              (concat "=== SYMBOL: " (symbol-name sym) " ===\\n"
@@ -286,9 +299,9 @@ mcp.addTool({
             );
         });
     },
-});
+}));
 
-mcp.addTool({
+mcp.addTool(secureMCPTool({
     name: "emacs_buffer_info",
     description: "Get comprehensive buffer information including content, mode details, and key variables. Writes content to /tmp/ClaudeWorkingFolder/buffer_info_<buffer_name>.txt for each buffer.",
     parameters: z.object({
@@ -296,7 +309,7 @@ mcp.addTool({
         include_content: z.boolean().default(true),
         include_variables: z.boolean().default(true),
     }),
-    execute: async (args) => {
+    execute: async (args: any) => {
         return new Promise((resolve, reject) => {
             try {
                 // Ensure /tmp/ClaudeWorkingFolder directory exists
@@ -377,15 +390,15 @@ mcp.addTool({
             }
         });
     },
-});
+}));
 
-mcp.addTool({
+mcp.addTool(secureMCPTool({
     name: "check_parens",
     description: "Run check-parens on one or more files by opening them fresh in Emacs to validate parentheses balance in Lisp code. Files must be within the current working directory or /tmp/ClaudeWorkingFolder. Relative paths are resolved from the current working directory.",
     parameters: z.object({
         file_paths: z.array(z.string().refine(isValidFilePath, "Invalid or restricted file path")).min(1, "Must provide at least one file path"),
     }),
-    execute: async (args) => {
+    execute: async (args: any) => {
         return new Promise((resolve, reject) => {
             const fileChecks = args.file_paths.map(filePath => 
                 `(let ((temp-buffer (find-file-noselect "${filePath}")))
@@ -420,15 +433,15 @@ mcp.addTool({
             );
         });
     },
-});
+}));
 
-mcp.addTool({
+mcp.addTool(secureMCPTool({
     name: "get_buffer_list",
     description: "Get a list of all live buffers in Emacs. Returns buffer names with their associated files (if any).",
     parameters: z.object({
         include_details: z.boolean().default(false).describe("Include buffer details like file, size, and modification status"),
     }),
-    execute: async (args) => {
+    execute: async (args: any) => {
         return new Promise((resolve, reject) => {
             let elisp: string;
             
@@ -471,16 +484,16 @@ mcp.addTool({
             );
         });
     },
-});
+}));
 
-mcp.addTool({
+mcp.addTool(secureMCPTool({
     name: "emacs_keymap_analysis",
     description: "Analyze keymaps for one or more buffer contexts and write to /tmp/ClaudeWorkingFolder/keymap_analysis_<buffer_name>.txt. Shows major mode keymap, minor mode keymaps, and local bindings.",
     parameters: z.object({
         buffer_names: z.array(z.string().refine(isValidBufferName, "Invalid buffer name")).min(1, "Must provide at least one buffer name"),
         include_global: z.boolean().default(false),
     }),
-    execute: async (args) => {
+    execute: async (args: any) => {
         return new Promise((resolve, reject) => {
             try {
                 // Ensure /tmp/ClaudeWorkingFolder directory exists
@@ -555,9 +568,9 @@ mcp.addTool({
             }
         });
     },
-});
+}));
 
-mcp.addTool({
+mcp.addTool(secureMCPTool({
     name: "org_agenda_todo",
     description: "Change the state of an agenda item (e.g., TODO -> DONE). Can target items by line number in agenda buffer or by heading text in org files.",
     parameters: z.object({
@@ -567,7 +580,7 @@ mcp.addTool({
         agenda_type: z.string().optional().default("a").describe("Agenda type to work with (default 'a')"),
         org_file: z.string().optional().describe("Specific org file path (required for org_heading type)"),
     }),
-    execute: async (args) => {
+    execute: async (args: any) => {
         return new Promise((resolve, reject) => {
             let elisp: string;
             
@@ -624,9 +637,9 @@ mcp.addTool({
             );
         });
     },
-});
+}));
 
-mcp.addTool({
+mcp.addTool(secureMCPTool({
     name: "org_capture",
     description: "Add a new agenda item via org-capture mechanism. Uses existing capture templates or allows custom capture.",
     parameters: z.object({
@@ -634,7 +647,7 @@ mcp.addTool({
         content: z.string().optional().describe("Content to capture. If not provided, will use interactive capture"),
         immediate_finish: z.boolean().default(true).describe("Whether to immediately finish capture without opening editor"),
     }),
-    execute: async (args) => {
+    execute: async (args: any) => {
         return new Promise((resolve, reject) => {
             let elisp: string;
             
@@ -717,16 +730,16 @@ mcp.addTool({
             );
         });
     },
-});
+}));
 
-mcp.addTool({
+mcp.addTool(secureMCPTool({
     name: "org_get_all_todos",
     description: "Get all TODO items from org files, including unscheduled ones. Writes results to /tmp/ClaudeWorkingFolder/all_todos.txt.",
     parameters: z.object({
         include_done: z.boolean().default(false).describe("Include DONE items in results"),
         org_files: z.array(z.string()).optional().describe("Specific org files to search (defaults to org-agenda-files)"),
     }),
-    execute: async (args) => {
+    execute: async (args: any) => {
         return new Promise((resolve, reject) => {
             // Ensure /tmp/ClaudeWorkingFolder directory exists
             mkdirSync("/tmp/ClaudeWorkingFolder", { recursive: true });
@@ -775,9 +788,9 @@ mcp.addTool({
             );
         });
     },
-});
+}));
 
-mcp.addTool({
+mcp.addTool(secureMCPTool({
     name: "org_schedule_todo",
     description: "Schedule a TODO item by adding SCHEDULED property. Can target by heading text in org files.",
     parameters: z.object({
@@ -786,7 +799,7 @@ mcp.addTool({
         schedule_date: z.string().describe("Date/time to schedule (e.g., '2025-01-15', '2025-01-15 10:00', '+1d', 'today')"),
         remove_schedule: z.boolean().default(false).describe("Remove existing schedule instead of setting one"),
     }),
-    execute: async (args) => {
+    execute: async (args: any) => {
         return new Promise((resolve, reject) => {
             if (!isValidFilePath(args.org_file)) {
                 reject(new Error("Invalid or restricted file path"));
@@ -833,15 +846,203 @@ mcp.addTool({
             );
         });
     },
-});
+}));
 
-mcp.addTool({
+mcp.addTool(secureMCPTool({
+    name: "org_archive_todo",
+    description: "Archive a TODO item by moving it to the archive file. Can target by heading text in org files.",
+    parameters: z.object({
+        org_file: z.string().describe("Path to the org file containing the heading"),
+        heading_text: z.string().describe("Text of the heading to archive"),
+        archive_location: z.string().optional().describe("Archive location (defaults to file_archive::* Archive)"),
+    }),
+    execute: async (args: any) => {
+        return new Promise((resolve, reject) => {
+            if (!isValidFilePath(args.org_file)) {
+                reject(new Error("Invalid or restricted file path"));
+                return;
+            }
+            
+            let elisp: string;
+            
+            if (args.archive_location) {
+                elisp = `(save-window-excursion
+                    (find-file "${args.org_file}")
+                    (goto-char (point-min))
+                    (if (search-forward "${args.heading_text}" nil t)
+                        (progn
+                          (org-back-to-heading t)
+                          (let ((org-archive-location "${args.archive_location}"))
+                            (org-archive-subtree))
+                          (save-buffer)
+                          (format "Successfully archived heading '%s' from %s to %s" "${args.heading_text}" "${args.org_file}" "${args.archive_location}"))
+                      (error "Heading '%s' not found in %s" "${args.heading_text}" "${args.org_file}")))`;
+            } else {
+                elisp = `(save-window-excursion
+                    (find-file "${args.org_file}")
+                    (goto-char (point-min))
+                    (if (search-forward "${args.heading_text}" nil t)
+                        (progn
+                          (org-back-to-heading t)
+                          (org-archive-subtree)
+                          (save-buffer)
+                          (format "Successfully archived heading '%s' from %s" "${args.heading_text}" "${args.org_file}"))
+                      (error "Heading '%s' not found in %s" "${args.heading_text}" "${args.org_file}")))`;
+            }
+            
+            execFile(
+                "emacsclient",
+                ["-e", elisp],
+                { encoding: "utf8", shell: false },
+                (error, stdout, stderr) => {
+                    if (error) {
+                        reject(error);
+                    } else {
+                        resolve(stdout.trim().replace(/^"(.*)"$/, '$1'));
+                    }
+                },
+            );
+        });
+    },
+}));
+
+mcp.addTool(secureMCPTool({
+    name: "org_agenda_goto",
+    description: "Go to the source location of an agenda item and return file path and content around that location. Takes an agenda line number or searches for agenda item text.",
+    parameters: z.object({
+        target_type: z.enum(["agenda_line", "agenda_text"]).describe("Whether to target by agenda line number or search for agenda item text"),
+        target: z.string().describe("Either agenda line number (1-based) or agenda item text to search for"),
+        agenda_type: z.string().optional().default("a").describe("Agenda type to work with (default 'a')"),
+        context_lines: z.number().optional().default(5).describe("Number of lines before/after to show for context"),
+    }),
+    execute: async (args: any) => {
+        return new Promise((resolve, reject) => {
+            // Ensure /tmp/ClaudeWorkingFolder directory exists
+            mkdirSync("/tmp/ClaudeWorkingFolder", { recursive: true });
+            
+            const filename = join("/tmp/ClaudeWorkingFolder", `agenda_goto_result.txt`);
+            
+            let elisp: string;
+            
+            if (args.target_type === "agenda_line") {
+                elisp = `(save-window-excursion
+                    (let ((org-agenda-window-setup 'current-window)
+                          (result ""))
+                      (org-agenda nil "${args.agenda_type}")
+                      (with-current-buffer "*Org Agenda*"
+                        (goto-char (point-min))
+                        (forward-line (1- ${parseInt(args.target)}))
+                        (condition-case err
+                            (progn
+                              (org-agenda-goto)
+                              ;; Now we're in the source org file
+                              (let* ((file-name (buffer-file-name))
+                                     (line-num (line-number-at-pos))
+                                     (heading (org-get-heading t t t t))
+                                     (start-line (max 1 (- line-num ${args.context_lines})))
+                                     (end-line (+ line-num ${args.context_lines}))
+                                     (content ""))
+                                (setq result (concat result (format "=== AGENDA ITEM SOURCE ===\\n")))
+                                (setq result (concat result (format "File: %s\\n" file-name)))
+                                (setq result (concat result (format "Line: %d\\n" line-num)))
+                                (setq result (concat result (format "Heading: %s\\n\\n" heading)))
+                                (setq result (concat result (format "=== CONTEXT (lines %d-%d) ===\\n" start-line end-line)))
+                                
+                                ;; Get content with line numbers
+                                (save-excursion
+                                  (goto-char (point-min))
+                                  (forward-line (1- start-line))
+                                  (let ((current-line start-line))
+                                    (while (and (<= current-line end-line) (not (eobp)))
+                                      (setq content (concat content
+                                        (format "%4d%s %s\\n" 
+                                          current-line
+                                          (if (= current-line line-num) "→" " ")
+                                          (buffer-substring-no-properties (line-beginning-position) (line-end-position)))))
+                                      (forward-line 1)
+                                      (setq current-line (1+ current-line)))))
+                                (setq result (concat result content))
+                                (write-region result nil "${filename}")
+                                result))
+                          (error 
+                            (setq result (format "Error going to agenda item at line %s: %s\\n" "${args.target}" (error-message-string err)))
+                            (write-region result nil "${filename}")
+                            result)))))`;
+            } else {
+                // target_type === "agenda_text" - search for text in agenda
+                elisp = `(save-window-excursion
+                    (let ((org-agenda-window-setup 'current-window)
+                          (result ""))
+                      (org-agenda nil "${args.agenda_type}")
+                      (with-current-buffer "*Org Agenda*"
+                        (goto-char (point-min))
+                        (if (search-forward "${args.target}" nil t)
+                            (condition-case err
+                                (progn
+                                  (beginning-of-line)
+                                  (org-agenda-goto)
+                                  ;; Now we're in the source org file
+                                  (let* ((file-name (buffer-file-name))
+                                         (line-num (line-number-at-pos))
+                                         (heading (org-get-heading t t t t))
+                                         (start-line (max 1 (- line-num ${args.context_lines})))
+                                         (end-line (+ line-num ${args.context_lines}))
+                                         (content ""))
+                                    (setq result (concat result (format "=== AGENDA ITEM SOURCE ===\\n")))
+                                    (setq result (concat result (format "File: %s\\n" file-name)))
+                                    (setq result (concat result (format "Line: %d\\n" line-num)))
+                                    (setq result (concat result (format "Heading: %s\\n\\n" heading)))
+                                    (setq result (concat result (format "=== CONTEXT (lines %d-%d) ===\\n" start-line end-line)))
+                                    
+                                    ;; Get content with line numbers
+                                    (save-excursion
+                                      (goto-char (point-min))
+                                      (forward-line (1- start-line))
+                                      (let ((current-line start-line))
+                                        (while (and (<= current-line end-line) (not (eobp)))
+                                          (setq content (concat content
+                                            (format "%4d%s %s\\n" 
+                                              current-line
+                                              (if (= current-line line-num) "→" " ")
+                                              (buffer-substring-no-properties (line-beginning-position) (line-end-position)))))
+                                          (forward-line 1)
+                                          (setq current-line (1+ current-line)))))
+                                    (setq result (concat result content))
+                                    (write-region result nil "${filename}")
+                                    result))
+                              (error 
+                                (setq result (format "Error going to agenda item containing '%s': %s\\n" "${args.target}" (error-message-string err)))
+                                (write-region result nil "${filename}")
+                                result))
+                          (progn
+                            (setq result (format "Agenda item containing '%s' not found\\n" "${args.target}"))
+                            (write-region result nil "${filename}")
+                            result)))))`;
+            }
+            
+            execFile(
+                "emacsclient",
+                ["-e", elisp],
+                { encoding: "utf8", shell: false },
+                (error, stdout, stderr) => {
+                    if (error) {
+                        reject(error);
+                    } else {
+                        resolve(`Agenda goto result written to ${filename}:\n${stdout.trim().replace(/^"(.*)"$/, '$1')}`);
+                    }
+                },
+            );
+        });
+    },
+}));
+
+mcp.addTool(secureMCPTool({
     name: "get_workspace_buffers",
     description: "Get the list of buffers in each workspace. Writes results to /tmp/ClaudeWorkingFolder/workspace_buffers.txt.",
     parameters: z.object({
         workspace_name: z.string().optional().describe("Specific workspace name to get buffers for (if not provided, gets all workspaces)"),
     }),
-    execute: async (args) => {
+    execute: async (args: any) => {
         return new Promise((resolve, reject) => {
             // Ensure /tmp/ClaudeWorkingFolder directory exists
             mkdirSync("/tmp/ClaudeWorkingFolder", { recursive: true });
@@ -950,16 +1151,16 @@ mcp.addTool({
             );
         });
     },
-});
+}));
 
-mcp.addTool({
+mcp.addTool(secureMCPTool({
     name: "rename_workspace",
     description: "Rename a workspace by its slot number or current name.",
     parameters: z.object({
         workspace_identifier: z.string().describe("Current workspace name or slot number to rename"),
         new_name: z.string().describe("New name for the workspace"),
     }),
-    execute: async (args) => {
+    execute: async (args: any) => {
         return new Promise((resolve, reject) => {
             const elisp = `(cond 
                               ;; Check for Doom workspaces first
@@ -1029,15 +1230,15 @@ mcp.addTool({
             );
         });
     },
-});
+}));
 
-mcp.addTool({
+mcp.addTool(secureMCPTool({
     name: "create_workspace",
     description: "Create a new workspace with a given name.",
     parameters: z.object({
         workspace_name: z.string().describe("Name for the new workspace"),
     }),
-    execute: async (args) => {
+    execute: async (args: any) => {
         return new Promise((resolve, reject) => {
             const elisp = `(cond 
                               ;; Check for Doom workspaces first
@@ -1071,15 +1272,15 @@ mcp.addTool({
             );
         });
     },
-});
+}));
 
-mcp.addTool({
+mcp.addTool(secureMCPTool({
     name: "delete_workspace",
     description: "Delete a workspace by name or identifier.",
     parameters: z.object({
         workspace_identifier: z.string().describe("Workspace name or identifier to delete"),
     }),
-    execute: async (args) => {
+    execute: async (args: any) => {
         return new Promise((resolve, reject) => {
             const elisp = `(cond 
                               ;; Check for Doom workspaces first
@@ -1131,15 +1332,15 @@ mcp.addTool({
             );
         });
     },
-});
+}));
 
-mcp.addTool({
+mcp.addTool(secureMCPTool({
     name: "view_buffer",
     description: "Get the contents of one or more Emacs buffers and write each to /tmp/ClaudeWorkingFolder/<buffer_name>.txt. Returns a list of file paths for all buffers.",
     parameters: z.object({
         buffer_names: z.array(z.string().min(1, "Buffer name cannot be empty")).min(1, "Must provide at least one buffer name"),
     }),
-    execute: async (args) => {
+    execute: async (args: any) => {
         return new Promise((resolve, reject) => {
             try {
                 // Ensure /tmp/ClaudeWorkingFolder directory exists
@@ -1191,16 +1392,16 @@ mcp.addTool({
             }
         });
     },
-});
+}));
 
-mcp.addTool({
+mcp.addTool(secureMCPTool({
     name: "move_buffer_to_workspace",
     description: "Move a buffer to a specific workspace. Works with both Doom workspaces and Eyebrowse.",
     parameters: z.object({
         buffer_name: z.string().describe("Name of the buffer to move"),
         workspace_name: z.string().describe("Name of the target workspace"),
     }),
-    execute: async (args) => {
+    execute: async (args: any) => {
         return new Promise((resolve, reject) => {
             const elisp = `
                 (condition-case err
@@ -1264,7 +1465,7 @@ mcp.addTool({
             );
         });
     },
-});
+}));
 
 mcp.start({
     transportType: "stdio",

@@ -9,7 +9,10 @@
     "clean": "rm -rf dist",
     "build": "tsc --project tsconfig.build.json",
     "prepublishOnly": "npm run clean && npm run build",
-    "dev": "fastmcp dev src/emacs-introspection-mcp.ts"
+    "dev": "fastmcp dev src/emacs-introspection-mcp.ts",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:security": "vitest src/security.test.ts src/file-security.test.ts"
   },
   "keywords": [],
   "author": "",
@@ -29,6 +32,8 @@
   },
   "devDependencies": {
     "@types/node": "^22.15.17",
-    "typescript": "^5.8.3"
+    "@vitest/ui": "^3.2.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
   }
 }

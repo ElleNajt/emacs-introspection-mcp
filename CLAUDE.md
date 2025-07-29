@@ -65,6 +65,7 @@ This MCP server provides tools to introspect and interact with your running Emac
 **`org_get_all_todos(include_done=false, org_files?)`** - Get all TODO items from org files, including unscheduled ones (outputs to file)
 **`org_schedule_todo(org_file, heading_text, schedule_date, remove_schedule=false)`** - Schedule a TODO item by adding SCHEDULED property
 **`org_agenda_todo(target_type, target, new_state?, agenda_type?, org_file?)`** - Change agenda item state
+**`org_archive_todo(org_file, heading_text, archive_location?)`** - Archive a TODO item by moving it to archive file
 **`org_capture(template_key?, content?, immediate_finish=true)`** - Add new items via org-capture (immediate_finish=true completes capture without opening buffer)
 
 ## Common Use Cases
@@ -135,9 +136,10 @@ This MCP server provides tools to introspect and interact with your running Emac
 3. org_schedule_todo("~/Documents/Notes/inbox.org", "Test capture from Claude", "today") → schedule a TODO
 4. org_agenda_todo("agenda_line", "3", "DONE") → mark item on line 3 as done
 5. org_agenda_todo("org_heading", "Buy groceries", "TODO", org_file="/path/to/todo.org") → change specific heading
-6. org_capture() → see available capture templates
-7. org_capture("t", "New task from Claude") → quick task capture (completes immediately)
-8. org_capture("t", "New task", false) → open capture buffer for editing
+6. org_archive_todo("~/Documents/Notes/inbox.org", "Completed task", "archive.org::* Archived Tasks") → archive completed item
+7. org_capture() → see available capture templates
+8. org_capture("t", "New task from Claude") → quick task capture (completes immediately)
+9. org_capture("t", "New task", false) → open capture buffer for editing
 ```
 
 ### Debugging Elisp Syntax Errors
